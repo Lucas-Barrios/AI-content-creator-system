@@ -1,0 +1,32 @@
+{
+  "agent": {
+    "name": "SRH Content Creator",
+    "description": "AI agent for generating SRH University marketing and admissions content",
+    "version": "0.1.0"
+  },
+  "llm": {
+    "default_provider": "anthropic",
+    "default_model": "claude-opus-4-7",
+    "max_tokens": 2048,
+    "temperature": 0.7
+  },
+  "knowledge_base": {
+    "primary_dir": "knowledge_base/primary",
+    "secondary_dir": "knowledge_base/secondary",
+    "index_path": ".index/kb.faiss",
+    "chunk_size": 500,
+    "chunk_overlap": 50,
+    "top_k": 5
+  },
+  "content_types": [
+    "blog_post",
+    "social_media",
+    "email",
+    "landing_page",
+    "press_release"
+  ],
+  "output": {
+    "default_dir": "output",
+    "format": "markdown"
+  }
+}
