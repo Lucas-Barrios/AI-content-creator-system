@@ -11,6 +11,48 @@ Responsibilities:
 
 import os
 
+from dotenv import load_dotenv
+from openai import OpenAI, AuthenticationError, RateLimitError, APIConnectionError
+
+load_dotenv()
+
+
+class ContentGenerator:
+    """Simple OpenAI wrapper that loads credentials from .env and generates text."""
+
+    def __init__(self, model: str = "gpt-4o"):
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY is not set. Add it to your .env file.")
+        self.client = OpenAI(api_key=api_key)
+        self.model = model
+
+    def generate_content(self, prompt: str) -> str:
+        """
+        Send a prompt to OpenAI and return the generated text.
+
+        Args:
+            prompt: The full prompt string (system + user context already combined).
+
+        Returns:
+            The model's text response, or an error message string if the call fails.
+        """
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.choices[0].message.content
+
+        except AuthenticationError:
+            return "Error: Invalid OpenAI API key. Check OPENAI_API_KEY in your .env file."
+        except RateLimitError:
+            return "Error: OpenAI rate limit reached. Wait a moment and try again."
+        except APIConnectionError:
+            return "Error: Could not connect to OpenAI. Check your internet connection."
+        except Exception as e:
+            return f"Error: Unexpected issue — {e}"
+
 
 def get_client(provider: str = "anthropic"):
     """

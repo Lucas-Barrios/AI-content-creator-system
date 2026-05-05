@@ -33,3 +33,24 @@ def extract_metadata(file_path: str) -> dict:
 def process_document(file_path: str) -> list[dict]:
     """Full pipeline: load → clean → chunk → attach metadata. Returns a list of chunk dicts."""
     pass
+
+
+class MarkdownProcessor:
+    """Loads and processes all Markdown files in a given directory."""
+
+    def __init__(self, directory: str):
+        self.directory = directory
+        self.files: list[dict] = []
+
+    def process_all(self) -> list[dict]:
+        """Walk the directory, read every .md file, and return a list of {filename, content} dicts."""
+        import os
+        self.files = []
+        for root, _, filenames in os.walk(self.directory):
+            for name in sorted(filenames):
+                if name.endswith(".md"):
+                    path = os.path.join(root, name)
+                    with open(path, encoding="utf-8") as f:
+                        content = f.read()
+                    self.files.append({"filename": name, "path": path, "content": content})
+        return self.files
