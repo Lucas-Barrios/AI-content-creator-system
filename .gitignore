@@ -1,5 +1,7 @@
 # Environment variables — never commit secrets
 .env
+.env.local
+frontend/.env.local
 
 # Python cache
 __pycache__/
@@ -17,6 +19,14 @@ env/
 # Generated output
 output/
 outputs/
+uploads/
+feedback/
+logs/
+
+# Frontend build/dependency output
+frontend/node_modules/
+frontend/.next/
+frontend/tsconfig.tsbuildinfo
 
 # OS junk
 .DS_Store

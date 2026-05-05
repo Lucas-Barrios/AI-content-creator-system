@@ -1,100 +1,118 @@
-# SRH University — AI Content Creator
+# SRH University AI Content Creator
 
-A RAG-powered content generation system that produces on-brand marketing and admissions content using SRH University's own knowledge base.
+A knowledge-base grounded content generation system for on-brand SRH marketing and admissions content.
 
 ## Architecture
 
-```
-knowledge_base/ → document_processor → knowledge_base (vector index)
-                                              ↓
-                          user request → content_pipeline
-                                              ↓
-                          prompt_templates + llm_integration → output
+```txt
+Next.js frontend
+      ↓
+Next.js API proxy routes
+      ↓
+FastAPI backend
+      ↓
+content_pipeline + prompt_templates + llm_integration
+      ↓
+OpenAI API
 ```
 
 | Module | Responsibility |
 |---|---|
-| `document_processor.py` | Load, clean, and chunk raw documents |
-| `knowledge_base.py` | Embed chunks and retrieve relevant context |
-| `prompt_templates.py` | Brand-safe prompt templates per content type |
-| `llm_integration.py` | API calls to Anthropic / OpenAI |
-| `content_pipeline.py` | Orchestrate the full retrieve → generate flow |
-| `main.py` | CLI entry point |
+| `api_server.py` / `app.py` | UI-agnostic FastAPI backend |
+| `src/generation_service.py` | Request parsing, knowledge-base loading, generation orchestration |
+| `src/content_pipeline.py` | Document → monitor → brief → publish → iterate flow |
+| `src/prompt_templates.py` | Brand-safe prompt templates per content type |
+| `src/llm_integration.py` | OpenAI API calls and provider error handling |
+| `src/feedback_repository.py` | Feedback persistence boundary, currently file-backed |
+| `src/content_artifacts.py` | Backend artifact helpers such as comparison and DOCX export |
+| `frontend/` | Production Next.js interface |
+
+## Feedback Loop
+
+The frontend includes a feedback loop for generated drafts:
+
+- approve a generated draft
+- mark it as needing revision
+- add reviewer comments
+- regenerate using the reviewer feedback and previous draft
+
+The current backend stores feedback as append-only JSONL in `feedback/generation_feedback.jsonl`.
+The persistence layer is isolated in `src/feedback_repository.py` so it can be replaced with Supabase later.
+
+See [docs/feedback_loop.md](docs/feedback_loop.md) for the current flow and the planned Supabase-ready architecture.
 
 ## Setup
 
-**1. Clone and create a virtual environment**
 ```bash
-git clone <repo-url>
 cd ai-content-creator
 python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-```
-
-**2. Install dependencies**
-```bash
+source venv/bin/activate
 pip install -r requirements.txt
-```
-
-**3. Configure environment variables**
-```bash
 cp .env.example .env
-# Open .env and add your API keys
 ```
 
-**4. Populate the knowledge base**
+Add your OpenAI key to `.env`:
 
-Add your content to the Markdown files in `knowledge_base/`:
-- `knowledge_base/primary/brand_guidelines.md` — voice, tone, style rules
-- `knowledge_base/primary/program_specs.md` — degree programs, fees, locations
-- `knowledge_base/primary/past_content/` — drop in previous campaigns
-- `knowledge_base/secondary/german_higher_ed_trends.md` — market research
-- `knowledge_base/secondary/competitor_analysis.md` — competitor insights
-
-**5. Run the web interface (recommended for demos)**
 ```bash
-streamlit run app.py
+OPENAI_API_KEY=sk-...
+LLM_MODEL=gpt-4o-mini
 ```
-Opens at `http://localhost:8501`. The sidebar lets you pick content type, topic, and language. Toggle the comparison view to see our system vs. the ChatGPT baseline side by side.
 
-**Or use the CLI**
+## Run Locally
+
+Terminal 1, Python API:
+
 ```bash
-# Blog post in English
+uvicorn api_server:app --reload --host 127.0.0.1 --port 8000
+```
+
+Terminal 2, Next.js frontend:
+
+```bash
+cd frontend
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+Open the Next.js URL shown in the terminal, usually `http://localhost:3000`.
+The frontend calls local `/api/*` routes, which proxy to `PYTHON_API_BASE_URL`.
+
+## API Endpoints
+
+- `GET /health`
+- `POST /generate`
+- `POST /upload`
+- `POST /feedback`
+- `POST /chat`
+- `POST /chat/stream`
+- `POST /compare`
+- `POST /export/docx`
+
+## CLI
+
+The CLI still uses the same backend pipeline logic:
+
+```bash
 python main.py --type blog --topic "AI Ethics at SRH"
-
-# Blog post in German
-python main.py --type blog --topic "KI-Ethik an der SRH" --language german
-
-# Social media posts
 python main.py --type social --topic "Open Day June 2026" --extra "Join us 14 June in Berlin"
-
-# Program description
 python main.py --type program --topic "MSc Applied Data Science and AI"
-
-# Full pipeline demo (all 5 stages)
-python main.py --type demo
+python main.py --type newsletter --topic "April Campus Updates"
 ```
-
-## Content Types
-
-- `blog_post` — long-form article (~800–1200 words)
-- `social_media` — short post for LinkedIn / Instagram
-- `email` — admissions or newsletter email
-- `landing_page` — program landing page copy
-- `press_release` — formal announcement
 
 ## Project Structure
 
-```
+```txt
 ai-content-creator/
-├── src/                   # Application source code
+├── api_server.py
+├── app.py
+├── frontend/
+├── src/
+├── docs/
 ├── knowledge_base/
-│   ├── primary/           # Official SRH documents (high authority)
-│   └── secondary/         # Market research (supporting context)
-├── templates/             # Output format templates (Markdown, HTML)
-├── config/
-│   └── vscode_agent.json  # Agent configuration
-├── .env.example           # Environment variable template
+│   ├── primary/
+│   └── secondary/
+├── examples/
 ├── requirements.txt
 └── README.md
 ```

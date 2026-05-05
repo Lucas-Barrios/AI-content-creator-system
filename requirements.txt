@@ -1,6 +1,6 @@
-anthropic
 openai
 python-dotenv
-markdown
-streamlit
 python-docx
+fastapi
+uvicorn[standard]
+python-multipart

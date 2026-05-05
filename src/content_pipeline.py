@@ -5,9 +5,39 @@ Orchestrates the end-to-end content generation workflow.
 Stages: document → monitor → brief → publish → iterate
 """
 
+from __future__ import annotations
+
+from typing import Callable
+
 from src.document_processor import MarkdownProcessor
 from src.prompt_templates import blog_post_template, social_media_template, program_description_template, newsletter_template
 from src.llm_integration import ContentGenerator
+
+
+PromptBuilder = Callable[[str, str, str], str]
+
+
+def select_prompt_builder(content_type: str) -> PromptBuilder:
+    """Return the prompt builder for a content type."""
+    builders: dict[str, PromptBuilder] = {
+        "social": lambda context, topic, language: social_media_template(context, announcement=topic, language=language),
+        "program": lambda context, topic, language: program_description_template(context, program_name=topic, language=language),
+        "newsletter": lambda context, topic, language: newsletter_template(context, topic, language=language),
+        "blog": lambda context, topic, language: blog_post_template(context, topic, language=language),
+        "blog_post": lambda context, topic, language: blog_post_template(context, topic, language=language),
+    }
+    return builders.get(content_type, builders["blog"])
+
+
+def create_content_prompt(content_type: str, kb_context: str, topic: str, language: str) -> str:
+    """Create an LLM prompt for one content request."""
+    return select_prompt_builder(content_type)(kb_context, topic, language)
+
+
+def call_content_generator(prompt: str, generator: ContentGenerator | None = None) -> str:
+    """Call the content generation API for one prepared prompt."""
+    active_generator = generator or ContentGenerator()
+    return active_generator.generate_content(prompt)
 
 
 class Pipeline:
@@ -95,18 +125,8 @@ class Pipeline:
         content_type = self.content_need.get("content_type", "blog_post")
         topic = self.content_need.get("topic", "")
         extra = self.content_need.get("extra", topic)
-
-        if content_type == "social":
-            prompt = social_media_template(self.kb_context, announcement=extra or topic, language=self.language)
-        elif content_type == "program":
-            prompt = program_description_template(self.kb_context, program_name=extra or topic, language=self.language)
-        elif content_type == "newsletter":
-            prompt = newsletter_template(self.kb_context, topic, language=self.language)
-        else:  # default: blog_post
-            prompt = blog_post_template(self.kb_context, topic, language=self.language)
-
-        generator = ContentGenerator()
-        self.output = generator.generate_content(prompt)
+        prompt = create_content_prompt(content_type, self.kb_context, extra or topic, self.language)
+        self.output = call_content_generator(prompt)
         return self.output
 
     # ── Stage 5 ───────────────────────────────────────────────────────────────
