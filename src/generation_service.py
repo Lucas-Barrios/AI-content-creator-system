@@ -14,6 +14,7 @@ from typing import Literal
 
 from dotenv import load_dotenv
 
+from src.brand_intelligence import assemble_brand_block, retrieve_brand_context
 from src.content_pipeline import Pipeline
 from src.document_processor import MarkdownProcessor
 
@@ -69,6 +70,7 @@ class GenerateContentRequest:
     files: list[UploadedFileRef] = field(default_factory=list)
     feedback: str = ""
     previousContent: str = ""
+    brand_profile_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -161,18 +163,37 @@ def build_style_preamble(request: GenerateContentRequest) -> str:
     )
 
 
+def _build_brand_prefix(request: GenerateContentRequest) -> str:
+    """Retrieve and format brand context when a profile ID is provided."""
+    if not request.brand_profile_id:
+        return ""
+    try:
+        ctx = retrieve_brand_context(topic=request.topic, profile_id=request.brand_profile_id)
+        if ctx is None:
+            logger.warning("Brand profile not found id=%s — generating without brand context", request.brand_profile_id)
+            return ""
+        block = assemble_brand_block(ctx)
+        logger.info("Brand context injected profile_id=%s chars=%s", request.brand_profile_id, len(block))
+        return block
+    except Exception as exc:
+        logger.warning("Brand context retrieval failed (non-fatal): %s", exc)
+        return ""
+
+
 def generate_content(request: GenerateContentRequest) -> GenerateContentResult:
     """Run the existing SRH content pipeline for a typed frontend request."""
-    logger.info("Starting content generation topic='%s' type=%s kb=%s", request.topic, request.contentType, request.knowledgeBase)
+    logger.info("Starting content generation topic='%s' type=%s kb=%s brand_profile=%s",
+                request.topic, request.contentType, request.knowledgeBase, request.brand_profile_id)
     topic = request.topic.strip()
     if not topic:
         logger.error("Content generation validation failed: topic is required")
         raise ValueError("Topic is required.")
 
     kb_context, sources = load_knowledge_base(request.knowledgeBase)
+    brand_prefix = _build_brand_prefix(request)
 
     pipeline = Pipeline(language=request.language)
-    pipeline.kb_context = build_style_preamble(request) + kb_context
+    pipeline.kb_context = brand_prefix + build_style_preamble(request) + kb_context
     pipeline.monitor(
         topic=topic,
         content_type=request.contentType,

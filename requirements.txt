@@ -1,6 +1,8 @@
 openai
 python-dotenv
 python-docx
+pypdf
 fastapi
 uvicorn[standard]
 python-multipart
+supabase
