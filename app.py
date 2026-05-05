@@ -124,17 +124,37 @@ st.markdown(f"""
 
   /* ── Suggestion pills ── */
   div.stButton > button[kind="secondary"] {{
-      border-radius: 999px !important;
+      border-radius: 5px !important;
       border: 1px solid #DDD !important;
       background: #F4F4F4 !important;
-      color: #333 !important;
-      font-size: 0.78rem !important;
-      padding: 0.2rem 0.6rem !important;
+      color: #444 !important;
+      font-size: 0.71rem !important;
+      padding: 0 0.45rem !important;
+      height: 32px !important;
+      min-height: 32px !important;
+      line-height: 1 !important;
   }}
   div.stButton > button[kind="secondary"]:hover {{
       border-color: {SRH_ORANGE} !important;
       background: #FFF0EC !important;
       color: {SRH_ORANGE} !important;
+  }}
+
+  /* ── Suggestion grid tightening ── */
+  .mlabel-sug {{
+      font-size: 0.63rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #AAA;
+      margin: 0.25rem 0 0.15rem;
+  }}
+  /* Collapse extra vertical space Streamlit adds around each stButton */
+  [data-testid="stColumn"] div.stButton {{
+      margin-bottom: 0.15rem !important;
+  }}
+  @media (max-width: 640px) {{
+      [data-testid="stHorizontalBlock"] {{ flex-direction: column !important; }}
   }}
 
   /* ── Tabs ── */
@@ -308,9 +328,9 @@ with left:
         label_visibility="collapsed",
     )
 
-    st.markdown('<p class="mlabel">Suggestions</p>', unsafe_allow_html=True)
-    sug_cols = st.columns(2)
-    for i, sug in enumerate(TOPIC_SUGGESTIONS[content_type]):
+    st.markdown('<p class="mlabel-sug">Suggestions</p>', unsafe_allow_html=True)
+    sug_cols = st.columns(2, gap="small")
+    for i, sug in enumerate(TOPIC_SUGGESTIONS[content_type][:4]):
         if sug_cols[i % 2].button(sug, key=f"sug_{sug}", use_container_width=True):
             st.session_state.topic_val = sug
             st.rerun()
