@@ -26,6 +26,12 @@ from src.api_helpers import (
     uploaded_files_to_dicts,
     validate_choice,
 )
+from src.campaign_service import (
+    CampaignRepository,
+    CampaignRequest,
+    generate_campaign,
+    regenerate_asset,
+)
 from src.brand_intelligence import (
     BrandConsistencyScore,
     SupabaseBrandRepository,
@@ -111,6 +117,40 @@ class ChatMessage(BaseModel):
 
 class ChatBody(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
+
+
+VALID_CAMPAIGN_CHANNELS = {"linkedin", "instagram", "email", "blog", "ads"}
+VALID_CAMPAIGN_TONES = {"Academic", "Formal", "Professional", "Friendly", "Conversational"}
+
+
+class CampaignGenerateBody(BaseModel):
+    organization_id: str = Field(alias="organizationId")
+    client_id: str = Field(alias="clientId")
+    project_id: str = Field(alias="projectId")
+    goal: str
+    offer: str
+    audience: str
+    channels: list[str]
+    start_date: str = Field(alias="startDate")
+    end_date: str = Field(alias="endDate")
+    language: str = "english"
+    tone: str = "Professional"
+    kb_source: str = Field(default="hybrid", alias="kbSource")
+    brand_profile_id: Optional[str] = Field(default=None, alias="brandProfileId")
+    created_by: Optional[str] = Field(default=None, alias="createdBy")
+    extra_context: str = Field(default="", alias="extraContext")
+
+    model_config = {"populate_by_name": True}
+
+
+class CampaignAssetRegenerateBody(BaseModel):
+    channel: str
+    concept_raw: dict[str, Any] = Field(alias="conceptRaw")
+    language: str = "english"
+    brand_profile_id: Optional[str] = Field(default=None, alias="brandProfileId")
+    extra_context: str = Field(default="", alias="extraContext")
+
+    model_config = {"populate_by_name": True}
 
 
 class BrandProfileCreateBody(BaseModel):
@@ -424,6 +464,145 @@ def feedback(body: FeedbackBody) -> dict[str, Any]:
     saved = get_feedback_repository().save(record)
     logger.info("Feedback saved id=%s generation_id=%s status=%s", saved.id, saved.generation_id, saved.status)
     return feedback_record_to_response(saved)
+
+
+@app.post("/campaigns/generate")
+def campaign_generate(body: CampaignGenerateBody) -> dict[str, Any]:
+    logger.info(
+        "Received /campaigns/generate client_id=%s goal='%s' channels=%s",
+        body.client_id, body.goal, body.channels,
+    )
+    bad_channels = set(body.channels) - VALID_CAMPAIGN_CHANNELS
+    if bad_channels:
+        raise HTTPException(status_code=400, detail=f"Unknown channels: {bad_channels}. Valid: {VALID_CAMPAIGN_CHANNELS}")
+
+    try:
+        req = CampaignRequest(
+            organization_id=body.organization_id,
+            client_id=body.client_id,
+            project_id=body.project_id,
+            goal=body.goal,
+            offer=body.offer,
+            audience=body.audience,
+            channels=body.channels,
+            start_date=body.start_date,
+            end_date=body.end_date,
+            language=body.language,
+            tone=body.tone,
+            kb_source=body.kb_source,
+            brand_profile_id=body.brand_profile_id,
+            created_by=body.created_by,
+            extra_context=body.extra_context,
+        )
+        result = generate_campaign(req)
+        logger.info(
+            "Campaign generated campaign_id=%s name='%s' assets=%s",
+            result.campaign_id, result.concept.name, len(result.assets),
+        )
+        return {
+            "campaignId": result.campaign_id,
+            "createdAt": result.created_at,
+            "concept": {
+                "name": result.concept.name,
+                "conceptSummary": result.concept.concept_summary,
+                "coreMessage": result.concept.core_message,
+                "audienceAngle": result.concept.audience_angle,
+                "channelStrategy": result.concept.channel_strategy,
+                "contentIdeas": result.concept.raw.get("content_ideas", []),
+                "ctaSuggestions": result.concept.cta_suggestions,
+                "calendarDraft": result.concept.raw.get("calendar_draft", []),
+            },
+            "assets": [
+                {
+                    "assetId": a.asset_id,
+                    "campaignItemId": a.campaign_item_id,
+                    "channel": a.channel,
+                    "label": a.label,
+                    "contentType": a.content_type,
+                    "content": a.content,
+                    "status": a.status,
+                }
+                for a in result.assets
+            ],
+        }
+    except ValueError as error:
+        logger.error("Campaign generate validation failed: %s", error)
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ContentGeneratorError as error:
+        logger.error("Campaign generate LLM error: %s", error)
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Campaign generate unexpected error")
+        raise HTTPException(status_code=500, detail=f"Unexpected campaign error: {error}") from error
+
+
+@app.get("/campaigns")
+def list_campaigns(
+    clientId: str,
+    projectId: Optional[str] = None,
+) -> dict[str, Any]:
+    logger.info("Received /campaigns GET client_id=%s", clientId)
+    try:
+        repo = CampaignRepository()
+        campaigns = repo.list_campaigns(clientId, projectId)
+        return {"campaigns": campaigns, "count": len(campaigns)}
+    except Exception as error:
+        logger.exception("Campaign list failed")
+        raise HTTPException(status_code=500, detail=f"Campaign list failed: {error}") from error
+
+
+@app.get("/campaigns/{campaign_id}")
+def get_campaign(campaign_id: str) -> dict[str, Any]:
+    logger.info("Received /campaigns/%s GET", campaign_id)
+    try:
+        repo = CampaignRepository()
+        campaign = repo.get_campaign(campaign_id)
+        if not campaign:
+            raise HTTPException(status_code=404, detail=f"Campaign '{campaign_id}' not found.")
+        assets = repo.get_campaign_assets(campaign_id)
+        return {"campaign": campaign, "assets": assets}
+    except HTTPException:
+        raise
+    except Exception as error:
+        logger.exception("Campaign fetch failed campaign_id=%s", campaign_id)
+        raise HTTPException(status_code=500, detail=f"Campaign fetch failed: {error}") from error
+
+
+@app.post("/campaigns/{campaign_id}/assets/{asset_id}/regenerate")
+def regenerate_campaign_asset(
+    campaign_id: str,
+    asset_id: str,
+    body: CampaignAssetRegenerateBody,
+) -> dict[str, Any]:
+    logger.info(
+        "Received /campaigns/%s/assets/%s/regenerate channel=%s",
+        campaign_id, asset_id, body.channel,
+    )
+    if body.channel not in VALID_CAMPAIGN_CHANNELS:
+        raise HTTPException(status_code=400, detail=f"Unknown channel '{body.channel}'.")
+    try:
+        asset = regenerate_asset(
+            campaign_id=campaign_id,
+            asset_id=asset_id,
+            channel=body.channel,
+            concept_raw=body.concept_raw,
+            language=body.language,
+            brand_profile_id=body.brand_profile_id,
+            extra_context=body.extra_context,
+        )
+        return {
+            "assetId": asset.asset_id,
+            "channel": asset.channel,
+            "label": asset.label,
+            "content": asset.content,
+            "status": asset.status,
+        }
+    except ContentGeneratorError as error:
+        logger.error("Asset regeneration LLM error: %s", error)
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Asset regeneration failed asset_id=%s", asset_id)
+        raise HTTPException(status_code=500, detail=f"Regeneration failed: {error}") from error
 
 
 @app.post("/brand/profiles")

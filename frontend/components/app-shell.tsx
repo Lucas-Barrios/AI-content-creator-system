@@ -1,10 +1,11 @@
 import Image from "next/image";
-import { FileText, History, MessageSquare } from "lucide-react";
+import { FileText, History, MessageSquare, Megaphone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
 const navItems = [
-  { label: "Generator", icon: FileText, href: "#generator", active: true },
+  { label: "Generator", icon: FileText, href: "/", active: false },
+  { label: "Campaigns", icon: Megaphone, href: "/campaigns", active: false },
   { label: "Chat", icon: MessageSquare, href: "#chat", active: false },
   { label: "History", icon: History, href: "#history", active: false }
 ];

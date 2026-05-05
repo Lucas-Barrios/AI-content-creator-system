@@ -63,6 +63,93 @@ export interface FeedbackResponse {
   createdAt: string;
 }
 
+// ── Campaign Generator ──────────────────────────────────────────────────────
+
+export type CampaignChannel = "linkedin" | "instagram" | "email" | "blog" | "ads";
+export type CampaignTone = "Academic" | "Formal" | "Professional" | "Friendly" | "Conversational";
+
+export interface ContentIdea {
+  id: number;
+  title: string;
+  channel: string;
+  format: string;
+  hook: string;
+  week: number;
+}
+
+export interface CalendarEntry {
+  week: number;
+  day: string;
+  channel: string;
+  title: string;
+  content_type: string;
+}
+
+export interface CampaignConcept {
+  name: string;
+  conceptSummary: string;
+  coreMessage: string;
+  audienceAngle: string;
+  channelStrategy: string;
+  contentIdeas: ContentIdea[];
+  ctaSuggestions: string[];
+  calendarDraft: CalendarEntry[];
+}
+
+export interface CampaignAsset {
+  assetId: string;
+  campaignItemId: string;
+  channel: CampaignChannel;
+  label: string;
+  contentType: string;
+  content: string;
+  status: "draft" | "approved" | "needs_revision";
+}
+
+export interface CampaignRequest {
+  organizationId: string;
+  clientId: string;
+  projectId: string;
+  goal: string;
+  offer: string;
+  audience: string;
+  channels: CampaignChannel[];
+  startDate: string;
+  endDate: string;
+  language: Language;
+  tone: string;
+  kbSource: KnowledgeBaseSource;
+  brandProfileId?: string;
+  extraContext?: string;
+}
+
+export interface CampaignResult {
+  campaignId: string;
+  createdAt: string;
+  concept: CampaignConcept;
+  assets: CampaignAsset[];
+}
+
+export interface CampaignSummary {
+  id: string;
+  name: string;
+  objective: string;
+  audience: string;
+  channels: string[];
+  status: string;
+  start_date: string;
+  end_date: string;
+  created_at: string;
+}
+
+export interface AssetRegenerateRequest {
+  channel: CampaignChannel;
+  conceptRaw: Record<string, unknown>;
+  language: Language;
+  brandProfileId?: string;
+  extraContext?: string;
+}
+
 export interface ApiErrorBody {
   error: string;
   detail?: string;
