@@ -16,6 +16,7 @@ env/
 
 # Generated output
 output/
+outputs/
 
 # OS junk
 .DS_Store

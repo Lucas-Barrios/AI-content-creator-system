@@ -20,7 +20,7 @@ load_dotenv()
 class ContentGenerator:
     """Simple OpenAI wrapper that loads credentials from .env and generates text."""
 
-    def __init__(self, model: str = "gpt-4o"):
+    def __init__(self, model: str = "gpt-4o-mini"):
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY is not set. Add it to your .env file.")
