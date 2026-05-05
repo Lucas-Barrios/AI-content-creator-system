@@ -214,6 +214,78 @@ One-sentence CTA directing the reader to apply or attend an info session.
 {_language_block(language)}"""
 
 
+def newsletter_template(kb_context: str, topic: str, language: str = "english") -> str:
+    """
+    Write a full HTML-ready newsletter for SRH University.
+
+    Use this template for monthly campus updates, programme launch announcements,
+    open-day invitations, or alumni round-ups. Output is structured email copy
+    with a subject line, scannable sections, and a clear CTA — ready to paste
+    into Mailchimp or a similar ESP.
+
+    Args:
+        kb_context: Relevant chunks retrieved from the SRH knowledge base.
+        topic: The newsletter edition theme (e.g. 'April Campus Updates').
+        language: Output language — 'english' or 'german'. Defaults to 'english'.
+
+    Returns:
+        A formatted prompt string ready to send to the LLM.
+    """
+    language = _validate_language(language)
+    return f"""You are SRH University's email marketing manager writing a newsletter edition.
+Produce complete, ready-to-send newsletter copy on the topic below.
+
+{SRH_VOICE_RULES}
+
+--- KNOWLEDGE BASE CONTEXT ---
+{kb_context}
+--- END CONTEXT ---
+
+TOPIC / EDITION THEME: {topic}
+
+OUTPUT STRUCTURE (use these exact headings, format in Markdown):
+
+HOOK RULE:
+- The subject line and opening sentence must be grounded in a specific SRH fact, event, or
+  alumni result from the context — not a generic "We hope this email finds you well" opener.
+- NEVER open with: "Dear reader,", "We are excited to share…", "In this edition…", or any
+  generic newsletter filler.
+
+## Subject Line
+One punchy subject line (max 9 words). Must create curiosity or state a concrete benefit.
+Write a second option prefixed "A/B:".
+
+## Preview Text
+One sentence (max 12 words) shown in the inbox before opening — complement the subject line.
+
+## Opening
+2–3 sentences. Start with a specific SRH hook (stat, alumni quote, or upcoming event date).
+Warm but direct — the reader is a prospective or current student, not a corporate contact.
+
+## Section 1 — Campus News & Events
+2–3 short paragraphs covering the most relevant upcoming events or recent news from the context.
+Include dates and locations where available. Use a subheading for each item.
+
+## Section 2 — Student & Alumni Spotlight
+One named student or alumni story drawn from the knowledge base. Include their role, programme,
+and a direct quote if available. 100–150 words.
+
+## Section 3 — Programme Highlight
+Spotlight one SRH programme relevant to the topic. Lead with a concrete outcome (career, skill,
+or stat). 80–120 words. End with a one-line CTA linking to the programme page.
+
+## Call to Action
+One primary CTA button label + URL placeholder, e.g.:
+**[Register for Open Day →](#)**
+One secondary CTA, e.g.: **[Explore Programmes →](#)**
+
+## Footer
+- Contact: admissions@srh-berlin.de
+- Address: SRH Berlin University of Applied Sciences, Ernst-Reuter-Platz 10, 10587 Berlin
+- Unsubscribe placeholder: [Unsubscribe](#)
+{_language_block(language)}"""
+
+
 def render_template(template: str, variables: dict) -> str:
     """Inject variables into a template string using str.format_map."""
     pass

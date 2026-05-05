@@ -6,7 +6,7 @@ Stages: document → monitor → brief → publish → iterate
 """
 
 from src.document_processor import MarkdownProcessor
-from src.prompt_templates import blog_post_template, social_media_template, program_description_template
+from src.prompt_templates import blog_post_template, social_media_template, program_description_template, newsletter_template
 from src.llm_integration import ContentGenerator
 
 
@@ -100,6 +100,8 @@ class Pipeline:
             prompt = social_media_template(self.kb_context, announcement=extra or topic, language=self.language)
         elif content_type == "program":
             prompt = program_description_template(self.kb_context, program_name=extra or topic, language=self.language)
+        elif content_type == "newsletter":
+            prompt = newsletter_template(self.kb_context, topic, language=self.language)
         else:  # default: blog_post
             prompt = blog_post_template(self.kb_context, topic, language=self.language)
 

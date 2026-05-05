@@ -77,20 +77,22 @@ with st.sidebar:
 
     content_type = st.selectbox(
         "Content Type",
-        options=["blog", "social", "program"],
+        options=["blog", "social", "program", "newsletter"],
         format_func=lambda x: {
-            "blog": "📝 Blog Post",
-            "social": "📱 Social Media",
-            "program": "🎓 Program Description",
+            "blog":       "📝 Blog Post",
+            "social":     "📱 Social Media",
+            "program":    "🎓 Program Description",
+            "newsletter": "📧 Newsletter",
         }[x],
     )
 
     topic = st.text_input(
         "Topic",
         placeholder={
-            "blog": "e.g. AI Ethics at SRH",
-            "social": "e.g. Open Day June 2026",
-            "program": "e.g. MSc Applied Data Science and AI",
+            "blog":       "e.g. AI Ethics at SRH",
+            "social":     "e.g. Open Day June 2026",
+            "program":    "e.g. MSc Applied Data Science and AI",
+            "newsletter": "e.g. April Campus Updates",
         }[content_type],
     )
 

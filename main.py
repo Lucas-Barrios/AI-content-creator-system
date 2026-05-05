@@ -23,10 +23,11 @@ OUTPUTS_DIR = "outputs"
 DIVIDER = "\n" + "═" * 60 + "\n"
 
 CONTENT_LABELS = {
-    "blog":    "Blog Post",
-    "social":  "Social Media Post",
-    "program": "Program Description",
-    "demo":    "Full Pipeline Demo",
+    "blog":       "Blog Post",
+    "social":     "Social Media Post",
+    "program":    "Program Description",
+    "newsletter": "Newsletter",
+    "demo":       "Full Pipeline Demo",
 }
 
 
@@ -128,6 +129,17 @@ def run_program(pipeline: Pipeline, topic: str, extra: str, language: str) -> No
     _publish_and_save(pipeline, "program", topic, language)
 
 
+def run_newsletter(pipeline: Pipeline, topic: str, language: str) -> None:
+    print(banner("Stage 2 — Monitor"))
+    print(pipeline.monitor(topic=topic, content_type="newsletter", audience="prospective and current students"))
+
+    print(banner("Stage 3 — Brief"))
+    print(pipeline.brief())
+
+    print(banner("Stage 4 — Publish · Generating newsletter..."))
+    _publish_and_save(pipeline, "newsletter", topic, language)
+
+
 def run_demo(pipeline: Pipeline, language: str) -> None:
     """Walk through all five pipeline stages with a preset topic."""
     topic = "How SRH Prepares Students for Careers in AI"
@@ -160,7 +172,7 @@ examples:
     )
     parser.add_argument(
         "--type",
-        choices=["blog", "social", "program", "demo"],
+        choices=["blog", "social", "program", "newsletter", "demo"],
         required=True,
         help="Content type to generate",
     )
@@ -218,6 +230,11 @@ def main() -> None:
             print("Error: --topic is required for program descriptions.")
             raise SystemExit(1)
         run_program(pipeline, args.topic, args.extra, language)
+    elif args.type == "newsletter":
+        if not args.topic:
+            print("Error: --topic is required for newsletters.")
+            raise SystemExit(1)
+        run_newsletter(pipeline, args.topic, language)
 
     print(banner("Done"))
 
