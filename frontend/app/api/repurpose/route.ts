@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 import type { RepurposeRequest, RepurposeResult } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
 
   const res = await fetch(`${backend.replace(/\/$/, "")}/repurpose`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: backendHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload)
   });
 

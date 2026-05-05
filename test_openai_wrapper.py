@@ -103,6 +103,17 @@ def test_empty_prompt_error_response() -> None:
     assert result["attempts"] == 0
 
 
+def test_prompt_size_guardrail() -> None:
+    wrapper = make_wrapper(FakeCompletions())
+    wrapper.max_prompt_chars = 5
+    result = wrapper.generate_description("This prompt is too long")
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "ContentGeneratorError"
+    assert "Prompt is too large" in result["error"]
+    assert result["attempts"] == 0
+
+
 def test_content_generator_uses_wrapper() -> None:
     wrapper = make_wrapper(FakeCompletions(content="Compatibility content"))
     generator = ContentGenerator(wrapper=wrapper)
@@ -127,6 +138,7 @@ def main() -> None:
     test_retry_success()
     test_standardized_error_response()
     test_empty_prompt_error_response()
+    test_prompt_size_guardrail()
     test_content_generator_uses_wrapper()
     test_content_generator_raises_standard_error()
     print("openai wrapper tests passed")

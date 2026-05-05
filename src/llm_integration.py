@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 _TIMEOUT_SECONDS = 60
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_BACKOFF_SECONDS = 1.0
+_DEFAULT_MAX_PROMPT_CHARS = 80_000
+_DEFAULT_MAX_OUTPUT_TOKENS = 1_800
 
 
 class ContentGeneratorError(Exception):
@@ -62,8 +64,17 @@ class OpenAIWrapper:
         self.model = model or os.getenv("LLM_MODEL", "gpt-4o-mini")
         self.max_retries = max(1, max_retries)
         self.backoff_seconds = max(0.0, backoff_seconds)
+        self.max_prompt_chars = int(os.getenv("MAX_LLM_PROMPT_CHARS", str(_DEFAULT_MAX_PROMPT_CHARS)))
+        self.max_output_tokens = int(os.getenv("MAX_LLM_OUTPUT_TOKENS", str(_DEFAULT_MAX_OUTPUT_TOKENS)))
         self.client = client or OpenAI(api_key=api_key)
-        logger.info("OpenAIWrapper initialized model=%s max_retries=%s backoff_seconds=%s", self.model, self.max_retries, self.backoff_seconds)
+        logger.info(
+            "OpenAIWrapper initialized model=%s max_retries=%s backoff_seconds=%s max_prompt_chars=%s max_output_tokens=%s",
+            self.model,
+            self.max_retries,
+            self.backoff_seconds,
+            self.max_prompt_chars,
+            self.max_output_tokens,
+        )
 
     def retry_delay(self, attempt: int) -> float:
         """Return exponential backoff delay for an attempt number."""
@@ -138,6 +149,14 @@ class OpenAIWrapper:
         if not prompt or not prompt.strip():
             logger.error("OpenAI request skipped: empty prompt")
             return self.error_response(ContentGeneratorError("Prompt is empty — nothing was sent to the API."), 0)
+        if len(prompt) > self.max_prompt_chars:
+            logger.error("OpenAI request skipped: prompt too large chars=%s limit=%s", len(prompt), self.max_prompt_chars)
+            return self.error_response(
+                ContentGeneratorError(
+                    f"Prompt is too large for configured cost controls ({len(prompt)} chars > {self.max_prompt_chars})."
+                ),
+                0,
+            )
 
         last_error: Optional[Exception] = None
         for attempt in range(1, self.max_retries + 1):
@@ -146,9 +165,14 @@ class OpenAIWrapper:
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=[{"role": "user", "content": prompt}],
+                    max_tokens=self.max_output_tokens,
                     timeout=_TIMEOUT_SECONDS,
                 )
                 return self.success_response(self.extract_content(response), attempt)
+            except (AuthenticationError, BadRequestError) as error:
+                last_error = error
+                logger.error("OpenAI non-retryable error model=%s attempt=%s/%s error=%s", self.model, attempt, self.max_retries, error)
+                break
             except Exception as error:
                 last_error = error
                 logger.error("OpenAI chat completion attempt failed model=%s attempt=%s/%s error=%s", self.model, attempt, self.max_retries, error)

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 import type { UploadedFile } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
 
   const backendResponse = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/upload`, {
     method: "POST",
+    headers: backendHeaders(),
     body: backendForm
   });
 

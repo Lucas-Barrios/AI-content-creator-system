@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 
 export const runtime = "nodejs";
 
@@ -12,7 +13,10 @@ export async function GET() {
     );
   }
 
-  const response = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/health`, { cache: "no-store" });
+  const response = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/health`, {
+    cache: "no-store",
+    headers: backendHeaders()
+  });
   if (!response.ok) {
     return NextResponse.json({ error: "Backend health check failed." }, { status: response.status });
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
 
   const streamResponse = await fetch(`${base}/chat/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: backendHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body)
   });
 
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
 
   const fallbackResponse = await fetch(`${base}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: backendHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body)
   });
 

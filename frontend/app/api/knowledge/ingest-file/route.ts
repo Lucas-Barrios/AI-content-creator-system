@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const response = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/knowledge/ingest-file`, {
     method: "POST",
+    headers: backendHeaders(),
     body: form
   });
   if (!response.ok) {

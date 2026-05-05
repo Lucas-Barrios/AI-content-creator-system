@@ -37,6 +37,9 @@ SUPPORTED_MIME_TYPES = {
     "text/markdown",
     "text/x-markdown",
 }
+MAX_EXTRACTED_TEXT_CHARS = int(os.getenv("MAX_EXTRACTED_TEXT_CHARS", "180000"))
+MAX_RAG_CHUNKS = int(os.getenv("MAX_RAG_CHUNKS", "120"))
+EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "32"))
 
 
 class RagIngestionError(ValueError):
@@ -165,7 +168,10 @@ def extract_text_from_source(source: KnowledgeSourceInput) -> str:
     ):
         return extract_docx_text(source.file_bytes)
     if mime_type in {"text/plain", "text/markdown", "text/x-markdown"} or filename.lower().endswith((".txt", ".md", ".markdown")):
-        return source.file_bytes.decode("utf-8")
+        try:
+            return source.file_bytes.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise RagIngestionError("Text file is not valid UTF-8.") from error
 
     raise RagIngestionError(
         f"Unsupported file type: {mime_type}. Supported sources: PDF, DOCX, TXT, Markdown, and pasted text."
@@ -315,8 +321,11 @@ class OpenAIEmbeddingProvider:
         if not texts:
             return []
         logger.info("Generating embeddings chunks=%s model=%s", len(texts), self.model)
-        response = self.client.embeddings.create(model=self.model, input=texts)
-        embeddings = [item.embedding for item in response.data]
+        embeddings: list[list[float]] = []
+        for start in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+            batch = texts[start : start + EMBEDDING_BATCH_SIZE]
+            response = self.client.embeddings.create(model=self.model, input=batch)
+            embeddings.extend(item.embedding for item in response.data)
         if len(embeddings) != len(texts):
             raise RagIngestionError("Embedding provider returned a different number of embeddings than inputs.")
         return embeddings
@@ -452,6 +461,10 @@ class RagIngestionService:
         cleaned = clean_text(raw_text)
         if len(cleaned) < 20:
             raise RagIngestionError("Source text is too short after cleaning. Add more useful source content.")
+        if len(cleaned) > MAX_EXTRACTED_TEXT_CHARS:
+            raise RagIngestionError(
+                f"Source text is too large after extraction ({len(cleaned)} chars > {MAX_EXTRACTED_TEXT_CHARS})."
+            )
 
         content_hash = hash_text(cleaned)
         duplicate = self.repository.find_document_by_hash(source.client_id, source.project_id, content_hash)
@@ -471,6 +484,8 @@ class RagIngestionService:
         document_id = str(document["id"])
         try:
             chunks = chunk_text(cleaned)
+            if len(chunks) > MAX_RAG_CHUNKS:
+                raise RagIngestionError(f"Source produced too many chunks ({len(chunks)} > {MAX_RAG_CHUNKS}). Split the source.")
             embeddings = self.embedder.embed_texts([chunk.content for chunk in chunks])
             for chunk, embedding in zip(chunks, embeddings):
                 chunk_record = self.repository.create_chunk(source, document_id, chunk)

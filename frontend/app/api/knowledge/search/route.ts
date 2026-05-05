@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   const payload = await request.json();
   const response = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/knowledge/search`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: backendHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload)
   });
   if (!response.ok) {

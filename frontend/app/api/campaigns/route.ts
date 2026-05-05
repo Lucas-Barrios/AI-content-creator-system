@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,8 @@ export async function GET(request: Request) {
   if (projectId) params.set("projectId", projectId);
 
   const response = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/campaigns?${params.toString()}`, {
-    cache: "no-store"
+    cache: "no-store",
+    headers: backendHeaders()
   });
   if (!response.ok) {
     return NextResponse.json({ error: "Campaign list failed.", detail: await readError(response) }, { status: response.status });

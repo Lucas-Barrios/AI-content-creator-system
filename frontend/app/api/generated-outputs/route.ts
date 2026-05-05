@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 
 export const runtime = "nodejs";
 
@@ -22,7 +23,10 @@ export async function GET(request: Request) {
   if (!clientId) return NextResponse.json({ error: "clientId is required." }, { status: 400 });
   const params = new URLSearchParams({ clientId });
   if (projectId) params.set("projectId", projectId);
-  const response = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/generated-outputs?${params.toString()}`, { cache: "no-store" });
+  const response = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/generated-outputs?${params.toString()}`, {
+    cache: "no-store",
+    headers: backendHeaders()
+  });
   if (!response.ok) return NextResponse.json({ error: "Generated outputs fetch failed.", detail: await readError(response) }, { status: response.status });
   return NextResponse.json(await response.json());
 }

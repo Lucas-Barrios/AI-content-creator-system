@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 import type { GenerateRequest, GenerateResponse, SourceFile } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
 
   const backendResponse = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/generate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: backendHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload)
   });
 

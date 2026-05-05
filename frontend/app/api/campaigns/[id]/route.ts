@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 
 export const runtime = "nodejs";
 
@@ -12,7 +13,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const backendResponse = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/campaigns/${id}`, {
     method: "GET",
-    headers: { "Content-Type": "application/json" }
+    headers: backendHeaders({ "Content-Type": "application/json" })
   });
 
   if (!backendResponse.ok) {

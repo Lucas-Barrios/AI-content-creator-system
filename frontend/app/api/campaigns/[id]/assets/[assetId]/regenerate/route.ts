@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 import type { AssetRegenerateRequest } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ export async function POST(
     `${backendBaseUrl.replace(/\/$/, "")}/campaigns/${id}/assets/${assetId}/regenerate`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: backendHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload)
     }
   );

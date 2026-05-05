@@ -45,7 +45,7 @@ async function parseError(response: Response): Promise<ApiClientError> {
   }
 
   return new ApiClientError(
-    body?.error ?? `Request failed with status ${response.status}`,
+    body?.error ?? body?.detail ?? `Request failed with status ${response.status}`,
     response.status,
     body?.detail
   );

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 
 export const runtime = "nodejs";
 
@@ -22,7 +23,10 @@ export async function GET(request: Request) {
   if (!clientId) return NextResponse.json({ error: "clientId is required." }, { status: 400 });
   const params = new URLSearchParams({ clientId });
   if (projectId) params.set("projectId", projectId);
-  const response = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/brand-profile?${params.toString()}`, { cache: "no-store" });
+  const response = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/brand-profile?${params.toString()}`, {
+    cache: "no-store",
+    headers: backendHeaders()
+  });
   if (!response.ok) return NextResponse.json({ error: "Brand profile fetch failed.", detail: await readError(response) }, { status: response.status });
   return NextResponse.json(await response.json());
 }
@@ -32,7 +36,7 @@ export async function POST(request: Request) {
   const payload = await request.json();
   const response = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/brand-profile`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: backendHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload)
   });
   if (!response.ok) return NextResponse.json({ error: "Brand profile save failed.", detail: await readError(response) }, { status: response.status });

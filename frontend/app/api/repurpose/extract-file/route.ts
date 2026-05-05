@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,7 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const res = await fetch(`${backend.replace(/\/$/, "")}/repurpose/extract-file`, {
     method: "POST",
+    headers: backendHeaders(),
     body: formData
   });
 

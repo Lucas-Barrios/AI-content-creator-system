@@ -12,9 +12,9 @@ import logging
 from typing import Any, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.api_helpers import (
@@ -58,29 +58,61 @@ from src.feedback_repository import FeedbackRecord, get_feedback_repository
 from src.logging_config import configure_logging
 from src.llm_integration import ContentGenerator, ContentGeneratorError
 from src.rag_ingestion import (
+    SUPPORTED_MIME_TYPES,
     KnowledgeSourceInput,
     RagIngestionError,
     RagIngestionService,
     search_knowledge_chunks,
+)
+from src.security import (
+    InMemoryRateLimiter,
+    client_ip,
+    get_security_settings,
+    require_backend_api_key,
+    validate_allowed_mime,
+    validate_content_length,
+    validate_text_length,
+    validate_upload_bytes,
+    validate_upload_count,
+    validate_uuid,
 )
 from src.supabase_client import SupabaseConfigurationError, get_supabase_admin_client
 
 load_dotenv()
 configure_logging()
 logger = logging.getLogger(__name__)
+security_settings = get_security_settings()
+rate_limiter = InMemoryRateLimiter(
+    max_requests=security_settings.rate_limit_requests,
+    window_seconds=security_settings.rate_limit_window_seconds,
+)
 
 app = FastAPI(title="SRH AI Content Creator API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=security_settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    try:
+        validate_content_length(request, security_settings)
+        require_backend_api_key(request, security_settings)
+        rate_limiter.check(client_ip(request))
+    except HTTPException as error:
+        return JSONResponse(status_code=error.status_code, content={"detail": error.detail})
+    return await call_next(request)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled API error path=%s", request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Unexpected backend error. Check server logs with the request timestamp."})
 
 
 class UploadedFileBody(BaseModel):
@@ -93,15 +125,15 @@ class UploadedFileBody(BaseModel):
 
 class GenerateBody(BaseModel):
     content_type: Optional[str] = Field(default=None, alias="contentType")
-    topic: str
-    audience: str = "Prospective Students"
+    topic: str = Field(min_length=2, max_length=500)
+    audience: str = Field(default="Prospective Students", max_length=200)
     language: str = "english"
-    tone: str = "Professional"
+    tone: str = Field(default="Professional", max_length=80)
     length: str = "Medium"
     knowledge_base: str = Field(default="hybrid", alias="knowledgeBase")
     files: list[UploadedFileBody] = Field(default_factory=list)
-    feedback: str = ""
-    previousContent: str = ""
+    feedback: str = Field(default="", max_length=4_000)
+    previousContent: str = Field(default="", max_length=30_000)
     brand_profile_id: Optional[str] = Field(default=None, alias="brandProfileId")
 
 
@@ -114,17 +146,17 @@ class FeedbackBody(BaseModel):
 
 
 class ContentArtifactBody(BaseModel):
-    content: str
-    topic: str = "SRH Content"
+    content: str = Field(min_length=1, max_length=80_000)
+    topic: str = Field(default="SRH Content", max_length=200)
 
 
 class ChatMessage(BaseModel):
     role: str
-    content: str
+    content: str = Field(min_length=1, max_length=8_000)
 
 
 class ChatBody(BaseModel):
-    messages: list[ChatMessage] = Field(default_factory=list)
+    messages: list[ChatMessage] = Field(default_factory=list, max_length=12)
 
 
 VALID_SOURCE_TYPES = {"blog_post", "transcript", "webinar_notes", "article", "social_post", "document", "other"}
@@ -134,10 +166,10 @@ class RepurposeBody(BaseModel):
     organization_id: str = Field(alias="organizationId")
     client_id: str = Field(alias="clientId")
     project_id: str = Field(alias="projectId")
-    source_text: str = Field(alias="sourceText")
-    source_title: str = Field(default="", alias="sourceTitle")
+    source_text: str = Field(alias="sourceText", min_length=20, max_length=80_000)
+    source_title: str = Field(default="", alias="sourceTitle", max_length=200)
     source_type: str = Field(default="article", alias="sourceType")
-    target_formats: list[str] = Field(alias="targetFormats")
+    target_formats: list[str] = Field(alias="targetFormats", min_length=1, max_length=7)
     language: str = "english"
     preserve_tone: bool = Field(default=True, alias="preserveTone")
     brand_profile_id: Optional[str] = Field(default=None, alias="brandProfileId")
@@ -163,18 +195,18 @@ class CampaignGenerateBody(BaseModel):
     organization_id: str = Field(alias="organizationId")
     client_id: str = Field(alias="clientId")
     project_id: str = Field(alias="projectId")
-    goal: str
-    offer: str
-    audience: str
-    channels: list[str]
-    start_date: str = Field(alias="startDate")
-    end_date: str = Field(alias="endDate")
+    goal: str = Field(min_length=3, max_length=700)
+    offer: str = Field(max_length=500)
+    audience: str = Field(max_length=300)
+    channels: list[str] = Field(min_length=1, max_length=5)
+    start_date: str = Field(alias="startDate", max_length=40)
+    end_date: str = Field(alias="endDate", max_length=40)
     language: str = "english"
     tone: str = "Professional"
     kb_source: str = Field(default="hybrid", alias="kbSource")
     brand_profile_id: Optional[str] = Field(default=None, alias="brandProfileId")
     created_by: Optional[str] = Field(default=None, alias="createdBy")
-    extra_context: str = Field(default="", alias="extraContext")
+    extra_context: str = Field(default="", alias="extraContext", max_length=8_000)
 
     model_config = {"populate_by_name": True}
 
@@ -243,26 +275,26 @@ class KnowledgeTextBody(BaseModel):
     organization_id: str = Field(alias="organizationId")
     client_id: str = Field(alias="clientId")
     project_id: Optional[str] = Field(default=None, alias="projectId")
-    title: str
-    text: str
+    title: str = Field(min_length=2, max_length=240)
+    text: str = Field(min_length=20, max_length=150_000)
     source_kind: str = Field(default="other", alias="sourceKind")
     content_type: Optional[str] = Field(default=None, alias="contentType")
     language: Optional[str] = None
     channel: Optional[str] = None
-    tags: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list, max_length=20)
     metadata: dict[str, Any] = Field(default_factory=dict)
     uploaded_by: Optional[str] = Field(default=None, alias="uploadedBy")
 
 
 class KnowledgeSearchBody(BaseModel):
-    query: str
+    query: str = Field(min_length=2, max_length=2_000)
     client_id: Optional[str] = Field(default=None, alias="clientId")
     project_id: Optional[str] = Field(default=None, alias="projectId")
     content_type: Optional[str] = Field(default=None, alias="contentType")
     language: Optional[str] = None
     channel: Optional[str] = None
-    match_count: int = Field(default=8, alias="matchCount")
-    match_threshold: float = Field(default=0.72, alias="matchThreshold")
+    match_count: int = Field(default=8, alias="matchCount", ge=1, le=20)
+    match_threshold: float = Field(default=0.72, alias="matchThreshold", ge=0.0, le=1.0)
 
 
 class BrandProfileBody(BaseModel):
@@ -288,6 +320,7 @@ CHANNELS = {"website", "linkedin", "instagram", "facebook", "x", "email", "newsl
 def _request_from_body(body: GenerateBody) -> GenerateContentRequest:
     logger.info("Validating generate request for topic='%s'", body.topic)
     try:
+        validate_text_length(body.topic, "topic", max_chars=500, min_chars=2)
         content_type = validate_choice(
             normalize_content_type(body.content_type),
             {"blog", "social", "program", "newsletter"},
@@ -338,6 +371,11 @@ def _normalize_optional_choice(value: str | None, allowed: set[str], field_name:
 
 
 def _knowledge_source_from_text_body(body: KnowledgeTextBody) -> KnowledgeSourceInput:
+    validate_uuid(body.organization_id, "organizationId")
+    validate_uuid(body.client_id, "clientId")
+    validate_uuid(body.project_id, "projectId", required=False)
+    validate_uuid(body.uploaded_by, "uploadedBy", required=False)
+    validate_text_length(body.text, "text", max_chars=150_000, min_chars=20)
     return KnowledgeSourceInput(
         organization_id=body.organization_id,
         client_id=body.client_id,
@@ -399,17 +437,21 @@ def generate(body: GenerateBody) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
         logger.exception("Unexpected generation error for topic='%s'", body.topic)
-        raise HTTPException(status_code=500, detail=f"Unexpected backend error: {error}") from error
+        raise HTTPException(status_code=500, detail="Unexpected backend error. Check server logs.") from error
 
 
 @app.post("/upload")
 async def upload(files: list[UploadFile] = File(default=[])) -> dict[str, list[dict[str, Any]]]:
     logger.info("Received /upload request files=%s", len(files))
+    validate_upload_count(len(files), security_settings)
     stored_files: list[tuple[str, bytes, str]] = []
     for file in files:
         content = await file.read()
+        filename = file.filename or "upload"
+        validate_upload_bytes(content, filename, security_settings)
+        validate_allowed_mime(file.content_type, filename, SUPPORTED_MIME_TYPES)
         logger.info("Read uploaded file name='%s' bytes=%s type='%s'", file.filename, len(content), file.content_type)
-        stored_files.append((file.filename or "upload", content, file.content_type or ""))
+        stored_files.append((filename, content, file.content_type or ""))
 
     uploaded = save_uploads(stored_files)
     logger.info("Upload request completed files=%s", len(uploaded))
@@ -428,7 +470,7 @@ def ingest_knowledge_text(body: KnowledgeTextBody) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
         logger.exception("Unexpected knowledge text ingestion error")
-        raise HTTPException(status_code=500, detail=f"Unexpected ingestion error: {error}") from error
+        raise HTTPException(status_code=500, detail="Unexpected ingestion error. Check server logs.") from error
 
 
 @app.post("/knowledge/ingest-file")
@@ -447,14 +489,22 @@ async def ingest_knowledge_file(
 ) -> dict[str, Any]:
     logger.info("Received /knowledge/ingest-file title='%s' filename='%s' client_id=%s", title, file.filename, client_id)
     try:
+        validate_uuid(organization_id, "organizationId")
+        validate_uuid(client_id, "clientId")
+        validate_uuid(project_id, "projectId", required=False)
+        validate_uuid(uploaded_by, "uploadedBy", required=False)
+        validate_text_length(title, "title", max_chars=240, min_chars=2)
         file_bytes = await file.read()
+        filename = file.filename or "upload"
+        validate_upload_bytes(file_bytes, filename, security_settings)
+        validate_allowed_mime(file.content_type, filename, SUPPORTED_MIME_TYPES)
         source = KnowledgeSourceInput(
             organization_id=organization_id,
             client_id=client_id,
             project_id=project_id,
             title=title,
             file_bytes=file_bytes,
-            filename=file.filename or "upload",
+            filename=filename,
             mime_type=file.content_type,
             source_kind=validate_choice(source_kind, SOURCE_KINDS, "sourceKind"),  # type: ignore[arg-type]
             content_type=_normalize_optional_choice(content_type, RAG_CONTENT_TYPES, "contentType"),  # type: ignore[arg-type]
@@ -470,13 +520,15 @@ async def ingest_knowledge_file(
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
         logger.exception("Unexpected knowledge file ingestion error")
-        raise HTTPException(status_code=500, detail=f"Unexpected ingestion error: {error}") from error
+        raise HTTPException(status_code=500, detail="Unexpected ingestion error. Check server logs.") from error
 
 
 @app.post("/knowledge/search")
 def search_knowledge(body: KnowledgeSearchBody) -> dict[str, Any]:
     logger.info("Received /knowledge/search client_id=%s project_id=%s query_chars=%s", body.client_id, body.project_id, len(body.query))
     try:
+        validate_uuid(body.client_id, "clientId")
+        validate_uuid(body.project_id, "projectId", required=False)
         matches = search_knowledge_chunks(
             query=body.query,
             client_id=body.client_id,
@@ -493,13 +545,15 @@ def search_knowledge(body: KnowledgeSearchBody) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
         logger.exception("Unexpected knowledge search error")
-        raise HTTPException(status_code=500, detail=f"Unexpected search error: {error}") from error
+        raise HTTPException(status_code=500, detail="Unexpected search error. Check server logs.") from error
 
 
 @app.get("/brand-profile")
 def get_brand_profile(clientId: str, projectId: Optional[str] = None) -> dict[str, Any]:
     logger.info("Received /brand-profile GET client_id=%s project_id=%s", clientId, projectId)
     try:
+        validate_uuid(clientId, "clientId")
+        validate_uuid(projectId, "projectId", required=False)
         db = get_supabase_admin_client()
         query = db.table("brand_profiles").select("*").eq("client_id", clientId).order("updated_at", desc=True).limit(1)
         if projectId:
@@ -510,13 +564,16 @@ def get_brand_profile(clientId: str, projectId: Optional[str] = None) -> dict[st
         raise HTTPException(status_code=503, detail=str(error)) from error
     except Exception as error:
         logger.exception("Brand profile fetch failed")
-        raise HTTPException(status_code=500, detail=f"Brand profile fetch failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Brand profile fetch failed. Check server logs.") from error
 
 
 @app.post("/brand-profile")
 def save_brand_profile(body: BrandProfileBody) -> dict[str, Any]:
     logger.info("Received /brand-profile POST client_id=%s project_id=%s", body.client_id, body.project_id)
     try:
+        validate_uuid(body.organization_id, "organizationId")
+        validate_uuid(body.client_id, "clientId")
+        validate_uuid(body.project_id, "projectId", required=False)
         db = get_supabase_admin_client()
         existing_query = db.table("brand_profiles").select("id").eq("client_id", body.client_id).limit(1)
         if body.project_id:
@@ -546,7 +603,7 @@ def save_brand_profile(body: BrandProfileBody) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except Exception as error:
         logger.exception("Brand profile save failed")
-        raise HTTPException(status_code=500, detail=f"Brand profile save failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Brand profile save failed. Check server logs.") from error
 
 
 @app.get("/generated-outputs")
@@ -557,6 +614,8 @@ def list_generated_outputs(
 ) -> dict[str, Any]:
     logger.info("Received /generated-outputs GET client_id=%s project_id=%s", clientId, projectId)
     try:
+        validate_uuid(clientId, "clientId")
+        validate_uuid(projectId, "projectId", required=False)
         db = get_supabase_admin_client()
         query = (
             db.table("generated_outputs")
@@ -573,7 +632,7 @@ def list_generated_outputs(
         raise HTTPException(status_code=503, detail=str(error)) from error
     except Exception as error:
         logger.exception("Generated outputs fetch failed")
-        raise HTTPException(status_code=500, detail=f"Generated outputs fetch failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Generated outputs fetch failed. Check server logs.") from error
 
 
 @app.post("/feedback")
@@ -610,6 +669,9 @@ def repurpose(body: RepurposeBody) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Unknown source_type '{body.source_type}'.")
 
     try:
+        validate_uuid(body.organization_id, "organizationId")
+        validate_uuid(body.client_id, "clientId")
+        validate_uuid(body.project_id, "projectId")
         req = RepurposeServiceRequest(
             organization_id=body.organization_id,
             client_id=body.client_id,
@@ -664,13 +726,14 @@ def repurpose(body: RepurposeBody) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except Exception as error:
         logger.exception("Repurpose unexpected error")
-        raise HTTPException(status_code=500, detail=f"Unexpected repurpose error: {error}") from error
+        raise HTTPException(status_code=500, detail="Unexpected repurpose error. Check server logs.") from error
 
 
 @app.get("/repurpose/{source_id}")
 def get_repurpose_result(source_id: str) -> dict[str, Any]:
     logger.info("Received /repurpose/%s GET", source_id)
     try:
+        validate_uuid(source_id, "source_id")
         repo = RepurposeRepository()
         data = repo.get_source_with_outputs(source_id)
         if not data:
@@ -680,7 +743,7 @@ def get_repurpose_result(source_id: str) -> dict[str, Any]:
         raise
     except Exception as error:
         logger.exception("Repurpose fetch failed source_id=%s", source_id)
-        raise HTTPException(status_code=500, detail=f"Fetch failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Fetch failed. Check server logs.") from error
 
 
 @app.post("/repurpose/{source_id}/outputs/{output_id}/regenerate")
@@ -696,6 +759,8 @@ def repurpose_regenerate(
     if body.format not in VALID_REPURPOSE_FORMATS:
         raise HTTPException(status_code=400, detail=f"Unknown format '{body.format}'.")
     try:
+        validate_uuid(source_id, "source_id")
+        validate_uuid(output_id, "output_id")
         output = regenerate_repurpose_output(
             source_id=source_id,
             output_id=output_id,
@@ -716,7 +781,7 @@ def repurpose_regenerate(
         raise HTTPException(status_code=502, detail=str(error)) from error
     except Exception as error:
         logger.exception("Repurpose regeneration failed output_id=%s", output_id)
-        raise HTTPException(status_code=500, detail=f"Regeneration failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Regeneration failed. Check server logs.") from error
 
 
 @app.post("/repurpose/extract-file")
@@ -726,13 +791,16 @@ async def repurpose_extract_file(file: UploadFile = File()) -> dict[str, Any]:
     try:
         from src.rag_ingestion import extract_text_from_source, KnowledgeSourceInput
         file_bytes = await file.read()
+        filename = file.filename or "upload"
+        validate_upload_bytes(file_bytes, filename, security_settings)
+        validate_allowed_mime(file.content_type, filename, SUPPORTED_MIME_TYPES)
         source = KnowledgeSourceInput(
             organization_id="00000000-0000-0000-0000-000000000000",
             client_id="00000000-0000-0000-0000-000000000000",
             project_id=None,
-            title=file.filename or "upload",
+            title=filename,
             file_bytes=file_bytes,
-            filename=file.filename or "upload",
+            filename=filename,
             mime_type=file.content_type,
         )
         text = extract_text_from_source(source)
@@ -753,6 +821,9 @@ def campaign_generate(body: CampaignGenerateBody) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Unknown channels: {bad_channels}. Valid: {VALID_CAMPAIGN_CHANNELS}")
 
     try:
+        validate_uuid(body.organization_id, "organizationId")
+        validate_uuid(body.client_id, "clientId")
+        validate_uuid(body.project_id, "projectId")
         req = CampaignRequest(
             organization_id=body.organization_id,
             client_id=body.client_id,
@@ -809,7 +880,7 @@ def campaign_generate(body: CampaignGenerateBody) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except Exception as error:
         logger.exception("Campaign generate unexpected error")
-        raise HTTPException(status_code=500, detail=f"Unexpected campaign error: {error}") from error
+        raise HTTPException(status_code=500, detail="Unexpected campaign error. Check server logs.") from error
 
 
 @app.get("/campaigns")
@@ -819,18 +890,21 @@ def list_campaigns(
 ) -> dict[str, Any]:
     logger.info("Received /campaigns GET client_id=%s", clientId)
     try:
+        validate_uuid(clientId, "clientId")
+        validate_uuid(projectId, "projectId", required=False)
         repo = CampaignRepository()
         campaigns = repo.list_campaigns(clientId, projectId)
         return {"campaigns": campaigns, "count": len(campaigns)}
     except Exception as error:
         logger.exception("Campaign list failed")
-        raise HTTPException(status_code=500, detail=f"Campaign list failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Campaign list failed. Check server logs.") from error
 
 
 @app.get("/campaigns/{campaign_id}")
 def get_campaign(campaign_id: str) -> dict[str, Any]:
     logger.info("Received /campaigns/%s GET", campaign_id)
     try:
+        validate_uuid(campaign_id, "campaign_id")
         repo = CampaignRepository()
         campaign = repo.get_campaign(campaign_id)
         if not campaign:
@@ -841,7 +915,7 @@ def get_campaign(campaign_id: str) -> dict[str, Any]:
         raise
     except Exception as error:
         logger.exception("Campaign fetch failed campaign_id=%s", campaign_id)
-        raise HTTPException(status_code=500, detail=f"Campaign fetch failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Campaign fetch failed. Check server logs.") from error
 
 
 @app.post("/campaigns/{campaign_id}/assets/{asset_id}/regenerate")
@@ -857,6 +931,8 @@ def regenerate_campaign_asset(
     if body.channel not in VALID_CAMPAIGN_CHANNELS:
         raise HTTPException(status_code=400, detail=f"Unknown channel '{body.channel}'.")
     try:
+        validate_uuid(campaign_id, "campaign_id")
+        validate_uuid(asset_id, "asset_id")
         asset = regenerate_asset(
             campaign_id=campaign_id,
             asset_id=asset_id,
@@ -878,13 +954,17 @@ def regenerate_campaign_asset(
         raise HTTPException(status_code=502, detail=str(error)) from error
     except Exception as error:
         logger.exception("Asset regeneration failed asset_id=%s", asset_id)
-        raise HTTPException(status_code=500, detail=f"Regeneration failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Regeneration failed. Check server logs.") from error
 
 
 @app.post("/brand/profiles")
 def create_brand_profile(body: BrandProfileCreateBody) -> dict[str, Any]:
     logger.info("Received /brand/profiles POST client_id=%s name='%s'", body.client_id, body.name)
     try:
+        validate_uuid(body.organization_id, "organizationId")
+        validate_uuid(body.client_id, "clientId")
+        validate_uuid(body.project_id, "projectId", required=False)
+        validate_uuid(body.created_by, "createdBy", required=False)
         repo = SupabaseBrandRepository()
         payload = build_brand_profile_payload(
             organization_id=body.organization_id,
@@ -911,7 +991,7 @@ def create_brand_profile(body: BrandProfileCreateBody) -> dict[str, Any]:
         return row
     except Exception as error:
         logger.exception("Brand profile creation failed")
-        raise HTTPException(status_code=500, detail=f"Brand profile creation failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Brand profile creation failed. Check server logs.") from error
 
 
 @app.get("/brand/profiles")
@@ -926,13 +1006,14 @@ def list_brand_profiles(
         return {"profiles": profiles, "count": len(profiles)}
     except Exception as error:
         logger.exception("Brand profile list failed")
-        raise HTTPException(status_code=500, detail=f"Brand profile list failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Brand profile list failed. Check server logs.") from error
 
 
 @app.get("/brand/profiles/{profile_id}")
 def get_brand_profile(profile_id: str) -> dict[str, Any]:
     logger.info("Received /brand/profiles/%s GET", profile_id)
     try:
+        validate_uuid(profile_id, "profile_id")
         repo = SupabaseBrandRepository()
         row = repo.get_profile(profile_id)
         if not row:
@@ -942,13 +1023,14 @@ def get_brand_profile(profile_id: str) -> dict[str, Any]:
         raise
     except Exception as error:
         logger.exception("Brand profile fetch failed profile_id=%s", profile_id)
-        raise HTTPException(status_code=500, detail=f"Brand profile fetch failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Brand profile fetch failed. Check server logs.") from error
 
 
 @app.put("/brand/profiles/{profile_id}")
 def update_brand_profile(profile_id: str, body: BrandProfileUpdateBody) -> dict[str, Any]:
     logger.info("Received /brand/profiles/%s PUT", profile_id)
     try:
+        validate_uuid(profile_id, "profile_id")
         repo = SupabaseBrandRepository()
         # Build payload from non-None fields only
         payload: dict[str, Any] = {}
@@ -979,7 +1061,7 @@ def update_brand_profile(profile_id: str, body: BrandProfileUpdateBody) -> dict[
         raise
     except Exception as error:
         logger.exception("Brand profile update failed profile_id=%s", profile_id)
-        raise HTTPException(status_code=500, detail=f"Brand profile update failed: {error}") from error
+        raise HTTPException(status_code=500, detail="Brand profile update failed. Check server logs.") from error
 
 
 @app.post("/brand/score")
@@ -1010,7 +1092,7 @@ def brand_score(body: BrandScoreBody) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except Exception as error:
         logger.exception("Brand scoring unexpected error")
-        raise HTTPException(status_code=500, detail=f"Unexpected scoring error: {error}") from error
+        raise HTTPException(status_code=500, detail="Unexpected scoring error. Check server logs.") from error
 
 
 @app.post("/compare")

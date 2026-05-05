@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendHeaders } from "@/lib/server/backend";
 import type { CampaignRequest, CampaignResult } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
 
   const backendResponse = await fetch(`${backendBaseUrl.replace(/\/$/, "")}/campaigns/generate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: backendHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload)
   });
 
