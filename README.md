@@ -51,16 +51,28 @@ Add your content to the Markdown files in `knowledge_base/`:
 - `knowledge_base/secondary/german_higher_ed_trends.md` — market research
 - `knowledge_base/secondary/competitor_analysis.md` — competitor insights
 
-**5. Build the index and generate content**
+**5. Run the web interface (recommended for demos)**
 ```bash
-# Build the vector index from all knowledge base documents
-python -m src.main --refresh-kb
+streamlit run app.py
+```
+Opens at `http://localhost:8501`. The sidebar lets you pick content type, topic, and language. Toggle the comparison view to see our system vs. the ChatGPT baseline side by side.
 
-# Generate a blog post
-python -m src.main --type blog_post --topic "AI programs at SRH" --audience "prospective students"
+**Or use the CLI**
+```bash
+# Blog post in English
+python main.py --type blog --topic "AI Ethics at SRH"
 
-# Generate a social media post and save to file
-python -m src.main --type social_media --topic "Open day 2026" --audience "high school graduates" --output output/open_day_post.md
+# Blog post in German
+python main.py --type blog --topic "KI-Ethik an der SRH" --language german
+
+# Social media posts
+python main.py --type social --topic "Open Day June 2026" --extra "Join us 14 June in Berlin"
+
+# Program description
+python main.py --type program --topic "MSc Applied Data Science and AI"
+
+# Full pipeline demo (all 5 stages)
+python main.py --type demo
 ```
 
 ## Content Types

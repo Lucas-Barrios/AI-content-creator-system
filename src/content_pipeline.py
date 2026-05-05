@@ -13,8 +13,9 @@ from src.llm_integration import ContentGenerator
 class Pipeline:
     """Five-stage content pipeline: ingest → identify need → brief → generate → refine."""
 
-    def __init__(self, kb_dir: str = "knowledge_base/primary/"):
+    def __init__(self, kb_dir: str = "knowledge_base/primary/", language: str = "english"):
         self.kb_dir = kb_dir
+        self.language = language
         self.kb_context: str = ""
         self.content_need: dict = {}
         self.content_brief: str = ""
@@ -56,7 +57,8 @@ class Pipeline:
             f"Content need identified:\n"
             f"  Type     : {content_type}\n"
             f"  Topic    : {topic}\n"
-            f"  Audience : {audience}"
+            f"  Audience : {audience}\n"
+            f"  Language : {self.language}"
         )
 
     # ── Stage 3 ───────────────────────────────────────────────────────────────
@@ -95,11 +97,11 @@ class Pipeline:
         extra = self.content_need.get("extra", topic)
 
         if content_type == "social":
-            prompt = social_media_template(self.kb_context, announcement=extra or topic)
+            prompt = social_media_template(self.kb_context, announcement=extra or topic, language=self.language)
         elif content_type == "program":
-            prompt = program_description_template(self.kb_context, program_name=extra or topic)
+            prompt = program_description_template(self.kb_context, program_name=extra or topic, language=self.language)
         else:  # default: blog_post
-            prompt = blog_post_template(self.kb_context, topic)
+            prompt = blog_post_template(self.kb_context, topic, language=self.language)
 
         generator = ContentGenerator()
         self.output = generator.generate_content(prompt)

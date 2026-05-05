@@ -11,9 +11,13 @@ Usage:
 
 import argparse
 import os
+import sys
 from datetime import datetime
 
+from dotenv import load_dotenv
+
 from src.content_pipeline import Pipeline
+from src.llm_integration import ContentGeneratorError
 
 OUTPUTS_DIR = "outputs"
 DIVIDER = "\n" + "═" * 60 + "\n"
@@ -30,18 +34,66 @@ def banner(title: str) -> str:
     return f"{DIVIDER}{title.upper()}{DIVIDER}"
 
 
-def save(content: str, content_type: str, topic: str) -> str:
-    os.makedirs(OUTPUTS_DIR, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    slug = topic.lower().replace(" ", "_")[:40]
-    filename = f"{OUTPUTS_DIR}/{content_type}_{slug}_{timestamp}.md"
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(f"<!-- type: {content_type} | topic: {topic} | generated: {timestamp} -->\n\n")
-        f.write(content)
-    return filename
+def check_env() -> None:
+    """Verify the environment is ready before any API calls are made."""
+    load_dotenv()
+
+    if not os.path.exists(".env"):
+        print(
+            "Warning: no .env file found in the current directory.\n"
+            "  Fix: run  cp .env.example .env  then add your API key."
+        )
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        print(
+            "\nError: OPENAI_API_KEY is not set.\n"
+            "  Fix: open .env and set:  OPENAI_API_KEY=sk-...\n"
+            "  Get a key at: https://platform.openai.com/api-keys"
+        )
+        sys.exit(1)
+
+    if not api_key.startswith("sk-"):
+        print(
+            "\nError: OPENAI_API_KEY looks malformed (expected to start with 'sk-').\n"
+            "  Fix: check the value in your .env file."
+        )
+        sys.exit(1)
 
 
-def run_blog(pipeline: Pipeline, topic: str, extra: str) -> None:
+LANG_CODE = {"english": "en", "german": "de"}
+
+
+def save(content: str, content_type: str, topic: str, language: str = "english") -> str:
+    try:
+        os.makedirs(OUTPUTS_DIR, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        slug = topic.lower().replace(" ", "_")[:40]
+        lang = LANG_CODE.get(language, "en")
+        filename = f"{OUTPUTS_DIR}/{content_type}_{slug}_{lang}_{timestamp}.md"
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(f"<!-- type: {content_type} | topic: {topic} | language: {language} | generated: {timestamp} -->\n\n")
+            f.write(content)
+        return filename
+    except OSError as e:
+        print(f"  Warning: could not save output — {e}")
+        return "(not saved)"
+
+
+def _publish_and_save(pipeline: Pipeline, content_type: str, topic: str, language: str = "english") -> None:
+    """Shared publish + save logic with error handling for all run_* functions."""
+    try:
+        content = pipeline.publish()
+    except ContentGeneratorError as e:
+        print(f"\nContent generation failed:\n  {e}")
+        sys.exit(1)
+
+    print(content)
+    path = save(content, content_type, topic, language)
+    print(f"\n✓ Saved → {path}")
+
+
+def run_blog(pipeline: Pipeline, topic: str, extra: str, language: str) -> None:
     print(banner("Stage 2 — Monitor"))
     print(pipeline.monitor(topic=topic, content_type="blog", audience="prospective international students", extra=extra))
 
@@ -49,14 +101,10 @@ def run_blog(pipeline: Pipeline, topic: str, extra: str) -> None:
     print(pipeline.brief())
 
     print(banner("Stage 4 — Publish · Generating blog post..."))
-    content = pipeline.publish()
-    print(content)
-
-    path = save(content, "blog", topic)
-    print(f"\n✓ Saved → {path}")
+    _publish_and_save(pipeline, "blog", topic, language)
 
 
-def run_social(pipeline: Pipeline, topic: str, extra: str) -> None:
+def run_social(pipeline: Pipeline, topic: str, extra: str, language: str) -> None:
     announcement = extra or topic
     print(banner("Stage 2 — Monitor"))
     print(pipeline.monitor(topic=topic, content_type="social", audience="prospective students", extra=announcement))
@@ -65,14 +113,10 @@ def run_social(pipeline: Pipeline, topic: str, extra: str) -> None:
     print(pipeline.brief())
 
     print(banner("Stage 4 — Publish · Generating social media posts..."))
-    content = pipeline.publish()
-    print(content)
-
-    path = save(content, "social", topic)
-    print(f"\n✓ Saved → {path}")
+    _publish_and_save(pipeline, "social", topic, language)
 
 
-def run_program(pipeline: Pipeline, topic: str, extra: str) -> None:
+def run_program(pipeline: Pipeline, topic: str, extra: str, language: str) -> None:
     program_name = extra or topic
     print(banner("Stage 2 — Monitor"))
     print(pipeline.monitor(topic=topic, content_type="program", audience="prospective students", extra=program_name))
@@ -81,14 +125,10 @@ def run_program(pipeline: Pipeline, topic: str, extra: str) -> None:
     print(pipeline.brief())
 
     print(banner("Stage 4 — Publish · Generating program description..."))
-    content = pipeline.publish()
-    print(content)
-
-    path = save(content, "program", topic)
-    print(f"\n✓ Saved → {path}")
+    _publish_and_save(pipeline, "program", topic, language)
 
 
-def run_demo(pipeline: Pipeline) -> None:
+def run_demo(pipeline: Pipeline, language: str) -> None:
     """Walk through all five pipeline stages with a preset topic."""
     topic = "How SRH Prepares Students for Careers in AI"
 
@@ -99,11 +139,7 @@ def run_demo(pipeline: Pipeline) -> None:
     print(pipeline.brief())
 
     print(banner("Stage 4 — Publish · Generating content..."))
-    content = pipeline.publish()
-    print(content)
-
-    path = save(content, "demo", topic)
-    print(f"\n✓ Saved → {path}")
+    _publish_and_save(pipeline, "demo", topic, language)
 
     print(banner("Stage 5 — Iterate"))
     feedback = "Open with a specific student outcome stat. Avoid generic AI trend opener."
@@ -139,36 +175,49 @@ examples:
         default="knowledge_base/primary/",
         help="Path to knowledge base directory (default: knowledge_base/primary/)",
     )
+    parser.add_argument(
+        "--language",
+        choices=["english", "german"],
+        default="english",
+        help="Output language (default: english)",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    check_env()
 
     print(banner(f"SRH AI Content Creator — {CONTENT_LABELS[args.type]}"))
 
     # Stage 1: Document (always runs)
     print(banner("Stage 1 — Document"))
-    pipeline = Pipeline(kb_dir=args.kb)
-    print(pipeline.document())
+    language = args.language
+
+    try:
+        pipeline = Pipeline(kb_dir=args.kb, language=language)
+        print(pipeline.document())
+    except (FileNotFoundError, NotADirectoryError, ValueError) as e:
+        print(f"\nKnowledge base error:\n  {e}")
+        sys.exit(1)
 
     if args.type == "demo":
-        run_demo(pipeline)
+        run_demo(pipeline, language)
     elif args.type == "blog":
         if not args.topic:
             print("Error: --topic is required for blog posts.")
             raise SystemExit(1)
-        run_blog(pipeline, args.topic, args.extra)
+        run_blog(pipeline, args.topic, args.extra, language)
     elif args.type == "social":
         if not args.topic:
             print("Error: --topic is required for social media posts.")
             raise SystemExit(1)
-        run_social(pipeline, args.topic, args.extra)
+        run_social(pipeline, args.topic, args.extra, language)
     elif args.type == "program":
         if not args.topic:
             print("Error: --topic is required for program descriptions.")
             raise SystemExit(1)
-        run_program(pipeline, args.topic, args.extra)
+        run_program(pipeline, args.topic, args.extra, language)
 
     print(banner("Done"))
 
