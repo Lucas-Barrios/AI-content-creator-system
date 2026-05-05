@@ -2,6 +2,9 @@ export type ContentType = "blog" | "social" | "program" | "newsletter";
 export type Language = "english" | "german";
 export type KnowledgeBaseSource = "hybrid" | "primary" | "secondary";
 export type Length = "Short" | "Medium" | "Long";
+export type KnowledgeSourceKind = "brand" | "product" | "audience" | "market" | "competitor" | "campaign" | "policy" | "other";
+export type MarketingContentType = ContentType | "email" | "ad" | "landing_page" | "other";
+export type MarketingChannel = "website" | "linkedin" | "instagram" | "facebook" | "x" | "email" | "newsletter" | "ads" | "blog" | "other";
 
 export interface SourceFile {
   filename: string;
@@ -61,6 +64,115 @@ export interface FeedbackResponse {
   generationId: string;
   status: FeedbackStatus;
   createdAt: string;
+}
+
+export interface WorkspaceSelection {
+  organizationId: string;
+  clientId: string;
+  projectId: string;
+  clientName: string;
+  projectName: string;
+}
+
+export interface HealthResponse {
+  status: string;
+}
+
+export interface KnowledgeTextRequest {
+  organizationId: string;
+  clientId: string;
+  projectId?: string;
+  title: string;
+  text: string;
+  sourceKind: KnowledgeSourceKind;
+  contentType?: MarketingContentType;
+  language?: Language;
+  channel?: MarketingChannel;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface KnowledgeIngestionResponse {
+  documentId: string;
+  duplicate: boolean;
+  contentHash: string;
+  chunkCount: number;
+  embeddingCount: number;
+  status: string;
+  message: string;
+}
+
+export interface KnowledgeSearchRequest {
+  query: string;
+  clientId?: string;
+  projectId?: string;
+  contentType?: MarketingContentType;
+  language?: Language;
+  channel?: MarketingChannel;
+  matchCount?: number;
+  matchThreshold?: number;
+}
+
+export interface KnowledgeMatch {
+  chunk_id: string;
+  document_id: string;
+  client_id: string;
+  project_id: string | null;
+  title: string;
+  content: string;
+  source_kind: KnowledgeSourceKind;
+  content_type: MarketingContentType | null;
+  language: string | null;
+  channel: MarketingChannel | null;
+  tags: string[];
+  similarity: number;
+}
+
+export interface KnowledgeSearchResponse {
+  matches: KnowledgeMatch[];
+  count: number;
+}
+
+export interface BrandProfile {
+  id?: string;
+  organization_id?: string;
+  client_id?: string;
+  project_id?: string | null;
+  name: string;
+  positioning: string;
+  voice: string;
+  tone_guidelines: string;
+  audience_summary: string;
+  approved_terms: string[];
+  banned_terms: string[];
+  compliance_notes: string;
+  brand_values: string[];
+}
+
+export interface BrandProfileRequest {
+  organizationId: string;
+  clientId: string;
+  projectId?: string;
+  name: string;
+  positioning: string;
+  voice: string;
+  toneGuidelines: string;
+  audienceSummary: string;
+  approvedTerms: string[];
+  bannedTerms: string[];
+  complianceNotes: string;
+  brandValues: string[];
+}
+
+export interface GeneratedOutputRecord {
+  id: string;
+  title: string | null;
+  content: string;
+  content_type: string;
+  channel: string | null;
+  language: string;
+  status: string;
+  created_at: string;
 }
 
 // ── Campaign Generator ──────────────────────────────────────────────────────

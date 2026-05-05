@@ -1,4 +1,24 @@
-import type { ApiErrorBody, FeedbackRequest, FeedbackResponse, GenerateRequest, GenerateResponse, UploadedFile } from "@/lib/types";
+import type {
+  ApiErrorBody,
+  BrandProfile,
+  BrandProfileRequest,
+  CampaignRequest,
+  CampaignResult,
+  CampaignSummary,
+  FeedbackRequest,
+  FeedbackResponse,
+  GenerateRequest,
+  GenerateResponse,
+  GeneratedOutputRecord,
+  HealthResponse,
+  KnowledgeIngestionResponse,
+  KnowledgeSearchRequest,
+  KnowledgeSearchResponse,
+  KnowledgeTextRequest,
+  RepurposeRequest,
+  RepurposeResult,
+  UploadedFile
+} from "@/lib/types";
 
 const defaultHeaders = {
   "Content-Type": "application/json"
@@ -73,6 +93,98 @@ export async function submitFeedback(payload: FeedbackRequest): Promise<Feedback
     headers: defaultHeaders,
     body: JSON.stringify(payload)
   });
+}
+
+export async function getBackendHealth(): Promise<HealthResponse> {
+  return requestJson<HealthResponse>("/api/health", { method: "GET" }, 0);
+}
+
+export async function generateCampaign(payload: CampaignRequest): Promise<CampaignResult> {
+  return requestJson<CampaignResult>("/api/campaigns/generate", {
+    method: "POST",
+    headers: defaultHeaders,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function listCampaigns(clientId: string, projectId?: string): Promise<{ campaigns: CampaignSummary[]; count: number }> {
+  const params = new URLSearchParams({ clientId });
+  if (projectId) params.set("projectId", projectId);
+  return requestJson<{ campaigns: CampaignSummary[]; count: number }>(`/api/campaigns?${params.toString()}`, { method: "GET" });
+}
+
+export async function repurposeContent(payload: RepurposeRequest): Promise<RepurposeResult> {
+  return requestJson<RepurposeResult>("/api/repurpose", {
+    method: "POST",
+    headers: defaultHeaders,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function ingestKnowledgeText(payload: KnowledgeTextRequest): Promise<KnowledgeIngestionResponse> {
+  return requestJson<KnowledgeIngestionResponse>("/api/knowledge/ingest-text", {
+    method: "POST",
+    headers: defaultHeaders,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function ingestKnowledgeFile(payload: {
+  organizationId: string;
+  clientId: string;
+  projectId?: string;
+  title: string;
+  sourceKind: string;
+  contentType?: string;
+  language?: string;
+  channel?: string;
+  tags?: string[];
+  file: File;
+}): Promise<KnowledgeIngestionResponse> {
+  const form = new FormData();
+  form.append("organizationId", payload.organizationId);
+  form.append("clientId", payload.clientId);
+  if (payload.projectId) form.append("projectId", payload.projectId);
+  form.append("title", payload.title);
+  form.append("sourceKind", payload.sourceKind);
+  if (payload.contentType) form.append("contentType", payload.contentType);
+  if (payload.language) form.append("language", payload.language);
+  if (payload.channel) form.append("channel", payload.channel);
+  form.append("tags", (payload.tags ?? []).join(","));
+  form.append("file", payload.file, payload.file.name);
+
+  return requestJson<KnowledgeIngestionResponse>("/api/knowledge/ingest-file", {
+    method: "POST",
+    body: form
+  });
+}
+
+export async function searchKnowledge(payload: KnowledgeSearchRequest): Promise<KnowledgeSearchResponse> {
+  return requestJson<KnowledgeSearchResponse>("/api/knowledge/search", {
+    method: "POST",
+    headers: defaultHeaders,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getBrandProfile(clientId: string, projectId?: string): Promise<{ profile: BrandProfile | null }> {
+  const params = new URLSearchParams({ clientId });
+  if (projectId) params.set("projectId", projectId);
+  return requestJson<{ profile: BrandProfile | null }>(`/api/brand-profile?${params.toString()}`, { method: "GET" });
+}
+
+export async function saveBrandProfile(payload: BrandProfileRequest): Promise<{ profile: BrandProfile }> {
+  return requestJson<{ profile: BrandProfile }>("/api/brand-profile", {
+    method: "POST",
+    headers: defaultHeaders,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function listGeneratedOutputs(clientId: string, projectId?: string): Promise<{ outputs: GeneratedOutputRecord[]; count: number }> {
+  const params = new URLSearchParams({ clientId });
+  if (projectId) params.set("projectId", projectId);
+  return requestJson<{ outputs: GeneratedOutputRecord[]; count: number }>(`/api/generated-outputs?${params.toString()}`, { method: "GET" });
 }
 
 export function downloadMarkdown(content: string, filename: string) {

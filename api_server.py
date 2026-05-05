@@ -63,6 +63,7 @@ from src.rag_ingestion import (
     RagIngestionService,
     search_knowledge_chunks,
 )
+from src.supabase_client import SupabaseConfigurationError, get_supabase_admin_client
 
 load_dotenv()
 configure_logging()
@@ -262,6 +263,21 @@ class KnowledgeSearchBody(BaseModel):
     channel: Optional[str] = None
     match_count: int = Field(default=8, alias="matchCount")
     match_threshold: float = Field(default=0.72, alias="matchThreshold")
+
+
+class BrandProfileBody(BaseModel):
+    organization_id: str = Field(alias="organizationId")
+    client_id: str = Field(alias="clientId")
+    project_id: Optional[str] = Field(default=None, alias="projectId")
+    name: str = "Default brand profile"
+    positioning: str = ""
+    voice: str = ""
+    tone_guidelines: str = Field(default="", alias="toneGuidelines")
+    audience_summary: str = Field(default="", alias="audienceSummary")
+    approved_terms: list[str] = Field(default_factory=list, alias="approvedTerms")
+    banned_terms: list[str] = Field(default_factory=list, alias="bannedTerms")
+    compliance_notes: str = Field(default="", alias="complianceNotes")
+    brand_values: list[str] = Field(default_factory=list, alias="brandValues")
 
 
 SOURCE_KINDS = {"brand", "product", "audience", "market", "competitor", "campaign", "policy", "other"}
@@ -478,6 +494,86 @@ def search_knowledge(body: KnowledgeSearchBody) -> dict[str, Any]:
     except Exception as error:
         logger.exception("Unexpected knowledge search error")
         raise HTTPException(status_code=500, detail=f"Unexpected search error: {error}") from error
+
+
+@app.get("/brand-profile")
+def get_brand_profile(clientId: str, projectId: Optional[str] = None) -> dict[str, Any]:
+    logger.info("Received /brand-profile GET client_id=%s project_id=%s", clientId, projectId)
+    try:
+        db = get_supabase_admin_client()
+        query = db.table("brand_profiles").select("*").eq("client_id", clientId).order("updated_at", desc=True).limit(1)
+        if projectId:
+            query = query.eq("project_id", projectId)
+        profile = query.execute().data
+        return {"profile": profile[0] if profile else None}
+    except SupabaseConfigurationError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Brand profile fetch failed")
+        raise HTTPException(status_code=500, detail=f"Brand profile fetch failed: {error}") from error
+
+
+@app.post("/brand-profile")
+def save_brand_profile(body: BrandProfileBody) -> dict[str, Any]:
+    logger.info("Received /brand-profile POST client_id=%s project_id=%s", body.client_id, body.project_id)
+    try:
+        db = get_supabase_admin_client()
+        existing_query = db.table("brand_profiles").select("id").eq("client_id", body.client_id).limit(1)
+        if body.project_id:
+            existing_query = existing_query.eq("project_id", body.project_id)
+        existing = existing_query.execute().data
+        payload = {
+            "organization_id": body.organization_id,
+            "client_id": body.client_id,
+            "project_id": body.project_id,
+            "name": body.name,
+            "positioning": body.positioning,
+            "voice": body.voice,
+            "tone_guidelines": body.tone_guidelines,
+            "audience_summary": body.audience_summary,
+            "approved_terms": body.approved_terms,
+            "banned_terms": body.banned_terms,
+            "compliance_notes": body.compliance_notes,
+            "brand_values": body.brand_values,
+            "is_default": True,
+        }
+        if existing:
+            profile = db.table("brand_profiles").update(payload).eq("id", existing[0]["id"]).execute().data[0]
+        else:
+            profile = db.table("brand_profiles").insert(payload).execute().data[0]
+        return {"profile": profile}
+    except SupabaseConfigurationError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Brand profile save failed")
+        raise HTTPException(status_code=500, detail=f"Brand profile save failed: {error}") from error
+
+
+@app.get("/generated-outputs")
+def list_generated_outputs(
+    clientId: str,
+    projectId: Optional[str] = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    logger.info("Received /generated-outputs GET client_id=%s project_id=%s", clientId, projectId)
+    try:
+        db = get_supabase_admin_client()
+        query = (
+            db.table("generated_outputs")
+            .select("*")
+            .eq("client_id", clientId)
+            .order("created_at", desc=True)
+            .limit(min(max(limit, 1), 100))
+        )
+        if projectId:
+            query = query.eq("project_id", projectId)
+        outputs = query.execute().data or []
+        return {"outputs": outputs, "count": len(outputs)}
+    except SupabaseConfigurationError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Generated outputs fetch failed")
+        raise HTTPException(status_code=500, detail=f"Generated outputs fetch failed: {error}") from error
 
 
 @app.post("/feedback")

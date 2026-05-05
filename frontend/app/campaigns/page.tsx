@@ -6,14 +6,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AppShell } from "@/components/app-shell";
 import { CampaignForm } from "@/components/campaigns/campaign-form";
 import { CampaignResultView } from "@/components/campaigns/campaign-result";
-import type { CampaignAsset, CampaignChannel, CampaignResult } from "@/lib/types";
-
-// Demo tenant IDs — replace with real auth context when Supabase auth is wired up
-const DEMO_ORG_ID = "00000000-0000-0000-0000-000000000001";
-const DEMO_CLIENT_ID = "00000000-0000-0000-0000-000000000002";
-const DEMO_PROJECT_ID = "00000000-0000-0000-0000-000000000003";
+import { generateCampaign } from "@/lib/api-client";
+import { useWorkspace } from "@/lib/hooks/use-workspace";
+import type { CampaignAsset, CampaignChannel, CampaignResult, Language, KnowledgeBaseSource } from "@/lib/types";
 
 export default function CampaignsPage() {
+  const { workspace } = useWorkspace();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CampaignResult | null>(null);
@@ -35,23 +33,14 @@ export default function CampaignsPage() {
     setResult(null);
 
     try {
-      const response = await fetch("/api/campaigns/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organizationId: DEMO_ORG_ID,
-          clientId: DEMO_CLIENT_ID,
-          projectId: DEMO_PROJECT_ID,
-          ...form
-        })
+      const data = await generateCampaign({
+        organizationId: workspace.organizationId,
+        clientId: workspace.clientId,
+        projectId: workspace.projectId,
+        ...form,
+        language: form.language as Language,
+        kbSource: form.kbSource as KnowledgeBaseSource
       });
-
-      if (!response.ok) {
-        const body = (await response.json()) as { error?: string; detail?: string };
-        throw new Error(body.detail ?? body.error ?? `Request failed with status ${response.status}`);
-      }
-
-      const data = (await response.json()) as CampaignResult;
       setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Campaign generation failed. Please try again.");

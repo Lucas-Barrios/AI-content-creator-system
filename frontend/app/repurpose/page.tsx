@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { AppShell } from "@/components/app-shell";
 import { SourceInput } from "@/components/repurpose/source-input";
 import { FormatSelector } from "@/components/repurpose/format-selector";
 import { RepurposeResultView } from "@/components/repurpose/repurpose-result";
+import { repurposeContent } from "@/lib/api-client";
+import { useWorkspace } from "@/lib/hooks/use-workspace";
 import type {
   Language,
   RepurposeFormat,
@@ -18,11 +21,8 @@ import type {
   SourceType
 } from "@/lib/types";
 
-const DEMO_ORG_ID = "00000000-0000-0000-0000-000000000001";
-const DEMO_CLIENT_ID = "00000000-0000-0000-0000-000000000002";
-const DEMO_PROJECT_ID = "00000000-0000-0000-0000-000000000003";
-
 export default function RepurposePage() {
+  const { workspace } = useWorkspace();
   const [sourceText, setSourceText] = useState("");
   const [sourceTitle, setSourceTitle] = useState("");
   const [sourceType, setSourceType] = useState<SourceType>("blog_post");
@@ -42,9 +42,9 @@ export default function RepurposePage() {
     setError(null);
     try {
       const body: RepurposeRequest = {
-        organizationId: DEMO_ORG_ID,
-        clientId: DEMO_CLIENT_ID,
-        projectId: DEMO_PROJECT_ID,
+        organizationId: workspace.organizationId,
+        clientId: workspace.clientId,
+        projectId: workspace.projectId,
         sourceText: sourceText.trim(),
         sourceTitle: sourceTitle.trim() || "Untitled",
         sourceType,
@@ -52,16 +52,7 @@ export default function RepurposePage() {
         language,
         preserveTone
       };
-      const res = await fetch("/api/repurpose", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string; detail?: string };
-        throw new Error(err.detail ?? err.error ?? "Repurposing failed.");
-      }
-      setResult(await res.json() as RepurposeResult);
+      setResult(await repurposeContent(body));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -111,6 +102,7 @@ export default function RepurposePage() {
   };
 
   return (
+    <AppShell>
     <div className="mx-auto max-w-7xl">
       <div className="mb-6">
         <div className="flex items-center gap-2">
@@ -218,5 +210,6 @@ export default function RepurposePage() {
         </div>
       </div>
     </div>
+    </AppShell>
   );
 }

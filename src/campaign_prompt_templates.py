@@ -121,6 +121,11 @@ If brand intelligence is present, honour all voice, terminology, and compliance 
 """
 
 
+def _additional_context_block(extra_context: str) -> str:
+    """Format optional context for f-string prompt templates."""
+    return f"ADDITIONAL CONTEXT:\n{extra_context}" if extra_context else ""
+
+
 def linkedin_post_prompt(
     concept: dict,
     brand_block: str = "",
@@ -134,7 +139,7 @@ Write a single LinkedIn post for the campaign below.
 
 {header}
 
-{"ADDITIONAL CONTEXT:\\n" + extra_context if extra_context else ""}
+{_additional_context_block(extra_context)}
 
 OUTPUT REQUIREMENTS:
 - Length: 120–180 words.
@@ -159,7 +164,7 @@ Write a single Instagram caption for the campaign below.
 
 {header}
 
-{"ADDITIONAL CONTEXT:\\n" + extra_context if extra_context else ""}
+{_additional_context_block(extra_context)}
 
 OUTPUT REQUIREMENTS:
 - Length: 60–90 words.
@@ -184,7 +189,7 @@ Write a complete marketing email for the campaign below.
 
 {header}
 
-{"ADDITIONAL CONTEXT:\\n" + extra_context if extra_context else ""}
+{_additional_context_block(extra_context)}
 
 OUTPUT FORMAT (use these exact labels, no markdown headers):
 SUBJECT: <max 9 words, creates curiosity or states a benefit>
@@ -213,7 +218,7 @@ Write a detailed blog post outline for the campaign below.
 
 {header}
 
-{"ADDITIONAL CONTEXT:\\n" + extra_context if extra_context else ""}
+{_additional_context_block(extra_context)}
 
 OUTPUT FORMAT (use these exact labels):
 TITLE: <SEO-optimised title, 55–65 characters>
@@ -247,7 +252,7 @@ Write ad copy variants for the campaign below.
 
 {header}
 
-{"ADDITIONAL CONTEXT:\\n" + extra_context if extra_context else ""}
+{_additional_context_block(extra_context)}
 
 OUTPUT FORMAT (use these exact labels for each variant):
 VARIANT A — Search Ad:
