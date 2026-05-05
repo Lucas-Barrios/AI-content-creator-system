@@ -38,15 +38,34 @@ def load_baseline() -> str:
 
 # ── Cache KB loading so it doesn't re-read files on every interaction ─────────
 
+KB_DIRS = {
+    "primary":   [("PRIMARY SOURCES (Brand, Programs, Alumni)", "knowledge_base/primary/")],
+    "secondary": [("SECONDARY SOURCES (Market Research, Competitor Analysis)", "knowledge_base/secondary/")],
+    "hybrid":    [
+        ("PRIMARY SOURCES (Brand, Programs, Alumni)", "knowledge_base/primary/"),
+        ("SECONDARY SOURCES (Market Research, Competitor Analysis)", "knowledge_base/secondary/"),
+    ],
+}
+
+
 @st.cache_resource(show_spinner=False)
-def load_knowledge_base(kb_dir: str) -> str:
+def load_knowledge_base(source: str) -> tuple[str, list[str]]:
     from src.document_processor import MarkdownProcessor
-    processor = MarkdownProcessor(kb_dir)
-    docs = processor.process_all()
-    context = "\n\n---\n\n".join(
-        f"### {doc['filename']}\n{doc['content']}" for doc in docs
-    )
-    return context, [d["filename"] for d in docs]
+
+    sections = []
+    filenames = []
+
+    for label, kb_dir in KB_DIRS[source]:
+        try:
+            processor = MarkdownProcessor(kb_dir)
+            docs = processor.process_all()
+            block = "\n\n---\n\n".join(f"### {doc['filename']}\n{doc['content']}" for doc in docs)
+            sections.append(f"## {label}\n\n{block}")
+            filenames.extend(d["filename"] for d in docs)
+        except (FileNotFoundError, ValueError):
+            pass
+
+    return "\n\n===\n\n".join(sections), filenames
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -89,6 +108,21 @@ with st.sidebar:
         horizontal=True,
     )
 
+    kb_source = st.radio(
+        "Knowledge Base",
+        options=["hybrid", "primary", "secondary"],
+        format_func=lambda x: {
+            "primary":   "🔵 Primary only",
+            "secondary": "🟡 Secondary only",
+            "hybrid":    "🟢 Hybrid (Primary + Secondary)",
+        }[x],
+        help=(
+            "**Primary** — SRH brand guidelines, program specs, alumni stories.\n\n"
+            "**Secondary** — Market research, competitor analysis, career trends.\n\n"
+            "**Hybrid** — Both combined for the richest context."
+        ),
+    )
+
     st.divider()
     generate_btn = st.button("✨ Generate Content", use_container_width=True, type="primary")
 
@@ -108,6 +142,8 @@ if "last_topic" not in st.session_state:
     st.session_state.last_topic = ""
 if "last_language" not in st.session_state:
     st.session_state.last_language = "english"
+if "last_kb_source" not in st.session_state:
+    st.session_state.last_kb_source = "hybrid"
 
 # ── Generation ────────────────────────────────────────────────────────────────
 
@@ -119,7 +155,7 @@ if generate_btn:
     else:
         try:
             with st.spinner("Loading knowledge base…"):
-                kb_context, filenames = load_knowledge_base("knowledge_base/primary/")
+                kb_context, filenames = load_knowledge_base(kb_source)
 
             with st.spinner(f"Generating {content_type} in {language}…"):
                 pipeline = Pipeline(language=language)
@@ -135,6 +171,7 @@ if generate_btn:
             st.session_state.generated = content
             st.session_state.last_topic = topic
             st.session_state.last_language = language
+            st.session_state.last_kb_source = kb_source
 
         except ContentGeneratorError as e:
             st.error(f"Generation failed: {e}")
@@ -146,7 +183,8 @@ if generate_btn:
 if st.session_state.generated:
     content = st.session_state.generated
     lang_label = "🇩🇪 German" if st.session_state.last_language == "german" else "🇬🇧 English"
-    st.success(f"Generated · {lang_label} · topic: _{st.session_state.last_topic}_")
+    kb_label = {"primary": "🔵 Primary", "secondary": "🟡 Secondary", "hybrid": "🟢 Hybrid"}[st.session_state.last_kb_source]
+    st.success(f"Generated · {lang_label} · {kb_label} KB · topic: _{st.session_state.last_topic}_")
 
     show_comparison = st.toggle("📊 Show side-by-side comparison with ChatGPT baseline")
 
@@ -207,10 +245,17 @@ else:
 4. **Publish** — Injects context into a brand-voice prompt and calls GPT-4o-mini
 5. **Iterate** — Captures feedback for the next generation cycle
 
-**Knowledge base (primary sources)**
+**Knowledge base — primary sources**
 - `srh_brand_guidelines.md` — voice, tone, and style rules
 - `srh_program_specs.md` — degree programs, fees, locations
 - `srh_career_outcomes.md` — employment stats and partner companies
 - `srh_student_success_stories.md` — named alumni quotes
 - `srh_newsletter_examples.md` — annotated past campaigns
+
+**Knowledge base — secondary sources**
+- `competitor_analysis.md` — Berlin market and international benchmarks
+- `german_higher_ed_trends.md` / `berlin_education_market.rtf` — market research
+- `career_trends.md` — industry demand signals
+- `email_benchmarks_education_marketing.md` — channel benchmarks
+- `student_needs.rtf` — prospective student pain points
         """)
