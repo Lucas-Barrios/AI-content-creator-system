@@ -142,6 +142,76 @@ export interface CampaignSummary {
   created_at: string;
 }
 
+// ── Content Repurposing Engine ──────────────────────────────────────────────
+
+export type RepurposeFormat =
+  | "linkedin"
+  | "instagram"
+  | "email"
+  | "blog_summary"
+  | "ad_copy"
+  | "landing_page"
+  | "video_script";
+
+export type SourceType =
+  | "blog_post"
+  | "transcript"
+  | "webinar_notes"
+  | "article"
+  | "social_post"
+  | "document"
+  | "other";
+
+export interface ContentExtraction {
+  title: string;
+  coreArgument: string;
+  keyPoints: string[];
+  facts: string[];
+  quotes: string[];
+  tone: string;
+  audienceSignals: string;
+  oneSentenceSummary: string;
+  raw: Record<string, unknown>;
+}
+
+export interface RepurposedOutput {
+  outputId: string;
+  format: RepurposeFormat;
+  label: string;
+  contentType: string;
+  channel: string;
+  content: string;
+  wordCount: number;
+  status: "draft" | "approved" | "needs_revision";
+}
+
+export interface RepurposeRequest {
+  organizationId: string;
+  clientId: string;
+  projectId: string;
+  sourceText: string;
+  sourceTitle: string;
+  sourceType: SourceType;
+  targetFormats: RepurposeFormat[];
+  language: Language;
+  preserveTone: boolean;
+  brandProfileId?: string;
+}
+
+export interface RepurposeResult {
+  sourceId: string;
+  createdAt: string;
+  extraction: ContentExtraction;
+  outputs: RepurposedOutput[];
+}
+
+export interface RepurposeOutputRegenerateRequest {
+  format: RepurposeFormat;
+  extractionRaw: Record<string, unknown>;
+  language: Language;
+  brandProfileId?: string;
+}
+
 export interface AssetRegenerateRequest {
   channel: CampaignChannel;
   conceptRaw: Record<string, unknown>;

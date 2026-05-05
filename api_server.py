@@ -32,6 +32,13 @@ from src.campaign_service import (
     generate_campaign,
     regenerate_asset,
 )
+from src.repurpose_service import (
+    RepurposeRepository,
+    RepurposeRequest as RepurposeServiceRequest,
+    repurpose_content,
+    regenerate_output as regenerate_repurpose_output,
+)
+from src.repurpose_prompt_templates import VALID_FORMATS as VALID_REPURPOSE_FORMATS
 from src.brand_intelligence import (
     BrandConsistencyScore,
     SupabaseBrandRepository,
@@ -117,6 +124,34 @@ class ChatMessage(BaseModel):
 
 class ChatBody(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
+
+
+VALID_SOURCE_TYPES = {"blog_post", "transcript", "webinar_notes", "article", "social_post", "document", "other"}
+
+
+class RepurposeBody(BaseModel):
+    organization_id: str = Field(alias="organizationId")
+    client_id: str = Field(alias="clientId")
+    project_id: str = Field(alias="projectId")
+    source_text: str = Field(alias="sourceText")
+    source_title: str = Field(default="", alias="sourceTitle")
+    source_type: str = Field(default="article", alias="sourceType")
+    target_formats: list[str] = Field(alias="targetFormats")
+    language: str = "english"
+    preserve_tone: bool = Field(default=True, alias="preserveTone")
+    brand_profile_id: Optional[str] = Field(default=None, alias="brandProfileId")
+    created_by: Optional[str] = Field(default=None, alias="createdBy")
+
+    model_config = {"populate_by_name": True}
+
+
+class RepurposeRegenerateBody(BaseModel):
+    format: str
+    extraction_raw: dict[str, Any] = Field(alias="extractionRaw")
+    language: str = "english"
+    brand_profile_id: Optional[str] = Field(default=None, alias="brandProfileId")
+
+    model_config = {"populate_by_name": True}
 
 
 VALID_CAMPAIGN_CHANNELS = {"linkedin", "instagram", "email", "blog", "ads"}
@@ -464,6 +499,151 @@ def feedback(body: FeedbackBody) -> dict[str, Any]:
     saved = get_feedback_repository().save(record)
     logger.info("Feedback saved id=%s generation_id=%s status=%s", saved.id, saved.generation_id, saved.status)
     return feedback_record_to_response(saved)
+
+
+@app.post("/repurpose")
+def repurpose(body: RepurposeBody) -> dict[str, Any]:
+    logger.info(
+        "Received /repurpose client_id=%s source_type=%s formats=%s chars=%s",
+        body.client_id, body.source_type, body.target_formats, len(body.source_text),
+    )
+    bad = set(body.target_formats) - VALID_REPURPOSE_FORMATS
+    if bad:
+        raise HTTPException(status_code=400, detail=f"Unknown formats: {bad}. Valid: {sorted(VALID_REPURPOSE_FORMATS)}")
+    if body.source_type not in VALID_SOURCE_TYPES:
+        raise HTTPException(status_code=400, detail=f"Unknown source_type '{body.source_type}'.")
+
+    try:
+        req = RepurposeServiceRequest(
+            organization_id=body.organization_id,
+            client_id=body.client_id,
+            project_id=body.project_id,
+            source_text=body.source_text,
+            source_title=body.source_title,
+            source_type=body.source_type,
+            target_formats=body.target_formats,
+            language=body.language,
+            preserve_tone=body.preserve_tone,
+            brand_profile_id=body.brand_profile_id,
+            created_by=body.created_by,
+        )
+        result = repurpose_content(req)
+        logger.info(
+            "/repurpose complete source_id=%s outputs=%s",
+            result.source_id, len(result.outputs),
+        )
+        return {
+            "sourceId": result.source_id,
+            "createdAt": result.created_at,
+            "extraction": {
+                "title": result.extraction.title,
+                "coreArgument": result.extraction.core_argument,
+                "keyPoints": result.extraction.key_points,
+                "facts": result.extraction.facts,
+                "quotes": result.extraction.quotes,
+                "tone": result.extraction.tone,
+                "audienceSignals": result.extraction.audience_signals,
+                "oneSentenceSummary": result.extraction.one_sentence_summary,
+                "raw": result.extraction.raw,
+            },
+            "outputs": [
+                {
+                    "outputId": o.output_id,
+                    "format": o.format,
+                    "label": o.label,
+                    "contentType": o.content_type,
+                    "channel": o.channel,
+                    "content": o.content,
+                    "wordCount": o.word_count,
+                    "status": o.status,
+                }
+                for o in result.outputs
+            ],
+        }
+    except ValueError as error:
+        logger.error("Repurpose validation failed: %s", error)
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ContentGeneratorError as error:
+        logger.error("Repurpose LLM error: %s", error)
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Repurpose unexpected error")
+        raise HTTPException(status_code=500, detail=f"Unexpected repurpose error: {error}") from error
+
+
+@app.get("/repurpose/{source_id}")
+def get_repurpose_result(source_id: str) -> dict[str, Any]:
+    logger.info("Received /repurpose/%s GET", source_id)
+    try:
+        repo = RepurposeRepository()
+        data = repo.get_source_with_outputs(source_id)
+        if not data:
+            raise HTTPException(status_code=404, detail=f"Repurpose source '{source_id}' not found.")
+        return data
+    except HTTPException:
+        raise
+    except Exception as error:
+        logger.exception("Repurpose fetch failed source_id=%s", source_id)
+        raise HTTPException(status_code=500, detail=f"Fetch failed: {error}") from error
+
+
+@app.post("/repurpose/{source_id}/outputs/{output_id}/regenerate")
+def repurpose_regenerate(
+    source_id: str,
+    output_id: str,
+    body: RepurposeRegenerateBody,
+) -> dict[str, Any]:
+    logger.info(
+        "Received /repurpose/%s/outputs/%s/regenerate format=%s",
+        source_id, output_id, body.format,
+    )
+    if body.format not in VALID_REPURPOSE_FORMATS:
+        raise HTTPException(status_code=400, detail=f"Unknown format '{body.format}'.")
+    try:
+        output = regenerate_repurpose_output(
+            source_id=source_id,
+            output_id=output_id,
+            fmt=body.format,
+            extraction_raw=body.extraction_raw,
+            language=body.language,
+            brand_profile_id=body.brand_profile_id,
+        )
+        return {
+            "outputId": output.output_id,
+            "format": output.format,
+            "label": output.label,
+            "content": output.content,
+            "wordCount": output.word_count,
+            "status": output.status,
+        }
+    except ContentGeneratorError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Repurpose regeneration failed output_id=%s", output_id)
+        raise HTTPException(status_code=500, detail=f"Regeneration failed: {error}") from error
+
+
+@app.post("/repurpose/extract-file")
+async def repurpose_extract_file(file: UploadFile = File()) -> dict[str, Any]:
+    """Extract plain text from an uploaded PDF, DOCX, TXT, or Markdown file."""
+    logger.info("Received /repurpose/extract-file filename='%s'", file.filename)
+    try:
+        from src.rag_ingestion import extract_text_from_source, KnowledgeSourceInput
+        file_bytes = await file.read()
+        source = KnowledgeSourceInput(
+            organization_id="00000000-0000-0000-0000-000000000000",
+            client_id="00000000-0000-0000-0000-000000000000",
+            project_id=None,
+            title=file.filename or "upload",
+            file_bytes=file_bytes,
+            filename=file.filename or "upload",
+            mime_type=file.content_type,
+        )
+        text = extract_text_from_source(source)
+        return {"text": text, "filename": file.filename, "charCount": len(text)}
+    except Exception as error:
+        logger.exception("File extraction failed")
+        raise HTTPException(status_code=400, detail=f"Could not extract text: {error}") from error
 
 
 @app.post("/campaigns/generate")
