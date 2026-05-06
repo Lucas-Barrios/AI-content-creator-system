@@ -1,6 +1,5 @@
 # ChatGPT Output — Why Choose SRH for AI and Data Science
 
-> Paste ChatGPT's response below. Use the same prompt topic for a fair comparison:
 > **"Write a blog post: Why Choose SRH for AI and Data Science"**
 > (no knowledge base context provided — vanilla ChatGPT from public knowledge only)
 
