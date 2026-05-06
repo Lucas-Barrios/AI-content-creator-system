@@ -11,10 +11,12 @@ import { InputPanel } from "@/components/content/input-panel";
 import { ResultsPanel } from "@/components/content/results-panel";
 import { generateContent, submitFeedback, uploadFiles } from "@/lib/api-client";
 import { useContentSession } from "@/lib/hooks/use-content-session";
+import { useWorkspace } from "@/lib/hooks/use-workspace";
 import type { FeedbackStatus } from "@/lib/types";
 
 export function ContentWorkbench() {
   const session = useContentSession();
+  const { workspace } = useWorkspace();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +25,12 @@ export function ContentWorkbench() {
     setIsGenerating(true);
     setError(null);
     try {
-      const response = await generateContent(session.request);
+      const response = await generateContent({
+        ...session.request,
+        organizationId: workspace.organizationId,
+        clientId: workspace.clientId,
+        projectId: workspace.projectId
+      });
       session.commitResponse(response);
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Generation failed.";
@@ -52,6 +59,9 @@ export function ContentWorkbench() {
     try {
       const response = await generateContent({
         ...(session.responseRequest ?? session.request),
+        organizationId: workspace.organizationId,
+        clientId: workspace.clientId,
+        projectId: workspace.projectId,
         feedback: comment,
         previousContent: session.response.content
       });

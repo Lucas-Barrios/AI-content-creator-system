@@ -144,7 +144,7 @@ export function CampaignResultView({ result, onRegenerate }: CampaignResultProps
                   <p className="text-xs text-muted-foreground">
                     <span className="font-medium">Format:</span> {idea.format}
                   </p>
-                  <p className="mt-2 text-xs italic text-muted-foreground">"{idea.hook}"</p>
+                  <p className="mt-2 text-xs italic text-muted-foreground">&ldquo;{idea.hook}&rdquo;</p>
                 </CardContent>
               </Card>
             ))}

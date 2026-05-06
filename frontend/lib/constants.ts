@@ -10,8 +10,12 @@ export const contentTypeOptions: Array<{ label: string; value: ContentType; desc
 export const topicSuggestions: Record<ContentType, string[]> = {
   blog: ["AI Ethics at SRH", "Why Study in Berlin?", "The CORE Principle", "Careers in Data Science"],
   social: ["Open Day June 2026", "New AI Programme", "Student Success Story", "Berlin Campus Life"],
+  social_post: ["Open Day June 2026", "New AI Programme", "Student Success Story", "Berlin Campus Life"],
   program: ["MSc Applied Data Science and AI", "Executive MBA", "BSc Computer Science", "MSc Big Data & Analytics"],
-  newsletter: ["April Campus Updates", "New Programme Launch", "Alumni Success Stories", "Open Day Invitation"]
+  newsletter: ["April Campus Updates", "New Programme Launch", "Alumni Success Stories", "Open Day Invitation"],
+  email: ["April Campus Updates", "New Programme Launch", "Alumni Success Stories", "Open Day Invitation"],
+  ad: ["Open Day Registration", "Executive MBA Applications", "Berlin Study Advantage", "Career-Focused Learning"],
+  ad_copy: ["Open Day Registration", "Executive MBA Applications", "Berlin Study Advantage", "Career-Focused Learning"]
 };
 
 export const audienceOptions = [

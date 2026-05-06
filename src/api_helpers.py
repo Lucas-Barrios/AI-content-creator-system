@@ -47,6 +47,10 @@ def normalize_content_type(content_type: str | None) -> str:
     normalized = content_type or "blog"
     if normalized == "blog_post":
         return "blog"
+    if normalized == "social_post":
+        return "social"
+    if normalized == "ad_copy":
+        return "ad"
     return normalized
 
 

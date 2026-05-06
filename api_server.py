@@ -159,6 +159,30 @@ class ChatBody(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list, max_length=12)
 
 
+class LlmGenerateBody(BaseModel):
+    system: str = Field(default="", max_length=20_000)
+    prompt: str = Field(min_length=1, max_length=80_000)
+
+
+class GeneratedOutputCreateBody(BaseModel):
+    organization_id: str = Field(alias="organizationId")
+    client_id: str = Field(alias="clientId")
+    project_id: str = Field(alias="projectId")
+    title: Optional[str] = Field(default=None, max_length=240)
+    prompt: Optional[str] = Field(default=None, max_length=120_000)
+    content: str = Field(min_length=1, max_length=120_000)
+    content_type: str = Field(alias="contentType")
+    channel: Optional[str] = None
+    language: str = "english"
+    status: str = "draft"
+    model: Optional[str] = None
+    word_count: Optional[int] = Field(default=None, alias="wordCount")
+    retrieved_chunk_ids: list[str] = Field(default_factory=list, alias="retrievedChunkIds")
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"populate_by_name": True}
+
+
 VALID_SOURCE_TYPES = {"blog_post", "transcript", "webinar_notes", "article", "social_post", "document", "other"}
 
 
@@ -633,6 +657,53 @@ def list_generated_outputs(
     except Exception as error:
         logger.exception("Generated outputs fetch failed")
         raise HTTPException(status_code=500, detail="Generated outputs fetch failed. Check server logs.") from error
+
+
+@app.post("/generated-outputs")
+def create_generated_output(body: GeneratedOutputCreateBody) -> dict[str, Any]:
+    logger.info(
+        "Received /generated-outputs POST client_id=%s project_id=%s content_type=%s framework=%s",
+        body.client_id,
+        body.project_id,
+        body.content_type,
+        body.metadata.get("framework"),
+    )
+    try:
+        validate_uuid(body.organization_id, "organizationId")
+        validate_uuid(body.client_id, "clientId")
+        validate_uuid(body.project_id, "projectId")
+        for chunk_id in body.retrieved_chunk_ids:
+            validate_uuid(chunk_id, "retrievedChunkIds[]")
+
+        payload = {
+            "organization_id": body.organization_id,
+            "client_id": body.client_id,
+            "project_id": body.project_id,
+            "title": body.title,
+            "prompt": body.prompt,
+            "content": body.content,
+            "content_type": normalize_content_type(body.content_type),
+            "channel": body.channel,
+            "language": body.language,
+            "status": body.status,
+            "model": body.model,
+            "word_count": body.word_count or len(body.content.split()),
+            "retrieved_chunk_ids": body.retrieved_chunk_ids,
+            "metadata": body.metadata,
+        }
+        db = get_supabase_admin_client()
+        response = db.table("generated_outputs").insert(payload).execute()
+        row = response.data[0] if response.data else payload
+        logger.info("Generated output saved id=%s framework=%s", row.get("id"), body.metadata.get("framework"))
+        return {"output": row}
+    except HTTPException:
+        raise
+    except SupabaseConfigurationError as error:
+        logger.error("Generated output persistence unavailable: %s", error)
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Generated output persistence failed client_id=%s", body.client_id)
+        raise HTTPException(status_code=500, detail="Generated output persistence failed. Check server logs.") from error
 
 
 @app.post("/feedback")
@@ -1147,6 +1218,23 @@ def chat(body: ChatBody) -> dict[str, str]:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except ContentGeneratorError as error:
         logger.error("Chat generation failed: %s", error)
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.post("/llm/generate")
+def llm_generate(body: LlmGenerateBody) -> dict[str, str]:
+    logger.info("Received /llm/generate system_chars=%s prompt_chars=%s", len(body.system), len(body.prompt))
+    try:
+        generator = ContentGenerator()
+        prompt = f"{body.system.strip()}\n\n{body.prompt.strip()}".strip()
+        content = generator.generate_content(prompt)
+        logger.info("/llm/generate completed response_chars=%s", len(content))
+        return {"content": content}
+    except ValueError as error:
+        logger.error("LLM generation validation failed: %s", error)
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ContentGeneratorError as error:
+        logger.error("LLM generation failed: %s", error)
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 

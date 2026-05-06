@@ -1,4 +1,4 @@
-export type ContentType = "blog" | "social" | "program" | "newsletter";
+export type ContentType = "blog" | "social" | "program" | "newsletter" | "email" | "ad" | "ad_copy" | "social_post";
 export type Language = "english" | "german";
 export type KnowledgeBaseSource = "hybrid" | "primary" | "secondary";
 export type Length = "Short" | "Medium" | "Long";
@@ -13,6 +13,10 @@ export interface SourceFile {
 }
 
 export interface GenerateRequest {
+  organizationId?: string;
+  clientId?: string;
+  projectId?: string;
+  brandProfileId?: string;
   contentType: ContentType;
   topic: string;
   audience: string;
@@ -23,6 +27,8 @@ export interface GenerateRequest {
   files?: UploadedFile[];
   feedback?: string;
   previousContent?: string;
+  compareWithLegacy?: boolean;
+  variantId?: "precision-v1" | "opinionated-v1" | "evidence-led-v1";
 }
 
 export interface UploadedFile {
@@ -46,7 +52,28 @@ export interface GenerateResponse {
       wordCount: number;
       generatedAt: string;
       generationId: string;
+      framework?: "legacy-python" | "ts-prompt-framework";
+      fallbackReason?: string;
+      promptRunId?: string;
+      templateId?: string;
+      templateVersion?: string;
+      variantId?: string;
+      uniquenessScore?: number;
+      baselineSimilarity?: number;
+      lexicalDiversity?: number;
+      sentenceVariation?: number;
+      ragContextUsed?: boolean;
+      brandProfileUsed?: boolean;
+      comparison?: {
+        newFrameworkUniquenessScore: number;
+        legacyUniquenessScore: number;
+        baselineSimilarity: number;
+        recommendedWinner: "new_framework" | "legacy";
+      };
   };
+  legacyOutput?: string;
+  newFrameworkOutput?: string;
+  selectedOutput?: string;
 }
 
 export type FeedbackStatus = "approved" | "needs_revision";
