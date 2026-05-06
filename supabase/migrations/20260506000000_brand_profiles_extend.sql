@@ -1,4 +1,4 @@
--- Extend brand_profiles with value_proposition and content examples.
+-- Extended brand_profiles with value_proposition and content examples.
 -- These fields complete the Brand Intelligence Layer's voice capture.
 
 alter table public.brand_profiles

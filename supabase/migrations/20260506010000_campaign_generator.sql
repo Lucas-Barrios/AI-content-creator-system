@@ -1,5 +1,5 @@
--- Campaign Generator: extend the campaigns table with strategic planning fields
--- and add a dedicated campaign_assets view for quick asset retrieval.
+-- Campaign Generator: extended the campaigns table with strategic planning fields
+-- and added a dedicated campaign_assets view for quick asset retrieval.
 --
 -- Design notes:
 --   - concept, core_message, audience_angle, channel_strategy are top-level text

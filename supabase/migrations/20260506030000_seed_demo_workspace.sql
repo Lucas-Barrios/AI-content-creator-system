@@ -1,9 +1,3 @@
--- Seed the three demo tenant rows that the frontend hard-codes, and fix
--- match_document_chunks so the service-role backend can actually get results.
---
--- Run this once in the Supabase SQL editor (or via supabase db push) after the
--- main schema migration has been applied.
-
 -- ── 1. Demo tenant rows ────────────────────────────────────────────────────────
 -- UUIDs must match defaultWorkspace in frontend/lib/workspace.ts
 
