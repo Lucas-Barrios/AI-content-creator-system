@@ -2,6 +2,13 @@
 
 A production-oriented AI marketing content workspace for generating SRH-branded content across channels. The system combines a Next.js frontend, a FastAPI backend, OpenAI generation, optional Supabase persistence, RAG ingestion, brand profiles, campaign generation, content repurposing, feedback capture, and a feature-flagged TypeScript prompt framework.
 
+## Start Here
+
+- **Project scope PDF:** [`PROJECT_SCOPE_DELIVERY_PLAN.pdf`](PROJECT_SCOPE_DELIVERY_PLAN.pdf)
+- **Editable scope source:** [`docs/project_scope_delivery_plan.md`](docs/project_scope_delivery_plan.md)
+- **Uniqueness evidence demo:** [`docs/uniqueness_evidence_demo.md`](docs/uniqueness_evidence_demo.md)
+- **Supabase setup:** [`docs/supabase_setup.md`](docs/supabase_setup.md)
+
 ## Architecture
 
 ```txt
@@ -299,6 +306,8 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 
 ```txt
 ai-content-creator/
+├── README.md
+├── PROJECT_SCOPE_DELIVERY_PLAN.pdf
 ├── api_server.py
 ├── frontend/
 │   ├── app/
@@ -316,5 +325,7 @@ ai-content-creator/
 │   └── migrations/
 ├── examples/
 ├── requirements.txt
-└── README.md
+└── .env.example
 ```
+
+This structure keeps the repository entry points at the root, product/technical documentation in `docs/`, frontend code in `frontend/`, backend code in `src/` plus `api_server.py`, and database migrations in `supabase/migrations/`.
